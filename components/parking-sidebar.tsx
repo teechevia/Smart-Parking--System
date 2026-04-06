@@ -1,6 +1,6 @@
 "use client"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
   LayoutDashboard,
   ParkingCircle,
@@ -29,6 +29,11 @@ const menuItems: MenuItem[] = [
 
 export function ParkingSidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+
+  const handleLogout = () => {
+    router.push("/login")
+  }
 
   return (
     <aside className="flex h-screen w-20 flex-col items-center justify-between py-6 md:w-24">
@@ -97,6 +102,7 @@ export function ParkingSidebar() {
 
         {/* Logout Button */}
         <button
+          onClick={handleLogout}
           className="group relative flex h-12 w-12 items-center justify-center rounded-xl text-zinc-500 transition-all duration-300 hover:bg-red-500/10 hover:text-red-400"
           aria-label="Logout"
         >

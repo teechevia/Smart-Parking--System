@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   ParkingCircle,
   Mail,
@@ -25,6 +26,7 @@ const roles = [
 ]
 
 export default function LoginPage() {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [role, setRole] = useState(roles[0])
@@ -32,6 +34,16 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(false)
   const [isRoleOpen, setIsRoleOpen] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsLoading(true)
+    // Simulate a brief loading state then navigate to dashboard
+    setTimeout(() => {
+      router.push("/")
+    }, 500)
+  }
 
   return (
     <div className="relative flex min-h-screen bg-zinc-950">
@@ -193,7 +205,7 @@ export default function LoginPage() {
             </div>
 
             {/* Form */}
-            <form className="space-y-5" onSubmit={(e) => e.preventDefault()}>
+            <form className="space-y-5" onSubmit={handleLogin}>
               {/* Email Input */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-zinc-300">Email Address</label>
@@ -314,21 +326,34 @@ export default function LoginPage() {
               {/* Login Button */}
               <button
                 type="submit"
-                className="group relative mt-6 w-full overflow-hidden rounded-2xl bg-gradient-to-r from-lime-500 to-lime-400 py-4 text-lg font-semibold text-zinc-900 shadow-xl shadow-lime-500/30 transition-all duration-500 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-lime-500/40"
+                disabled={isLoading}
+                className="group relative mt-6 w-full overflow-hidden rounded-2xl bg-gradient-to-r from-lime-500 to-lime-400 py-4 text-lg font-semibold text-zinc-900 shadow-xl shadow-lime-500/30 transition-all duration-500 hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-lime-500/40 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {/* Button glow */}
                 <div className="absolute inset-0 bg-gradient-to-r from-lime-400 to-lime-300 opacity-0 transition-opacity duration-500 group-hover:opacity-100" />
                 <span className="relative flex items-center justify-center gap-2">
-                  Sign In to Dashboard
-                  <svg
-                    className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2.5}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-                  </svg>
+                  {isLoading ? (
+                    <>
+                      <svg className="h-5 w-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Signing In...
+                    </>
+                  ) : (
+                    <>
+                      Sign In to Dashboard
+                      <svg
+                        className="h-5 w-5 transition-transform duration-300 group-hover:translate-x-1"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2.5}
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                    </>
+                  )}
                 </span>
               </button>
             </form>
