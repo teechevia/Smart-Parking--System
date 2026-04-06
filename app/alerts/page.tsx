@@ -99,6 +99,7 @@ const statusConfig = {
 }
 
 export default function AlertsPage() {
+<<<<<<< HEAD
   const [alertsList, setAlertsList] = useState<AlertItem[]>([])
   const [recentTimeline, setRecentTimeline] = useState<TimelineEvent[]>([])
   const [blacklistedVehicles, setBlacklistedVehicles] = useState<BlacklistedVehicle[]>([])
