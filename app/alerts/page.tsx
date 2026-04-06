@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { ParkingSidebar } from "@/components/parking-sidebar"
 import {
   Bell,
@@ -17,41 +18,43 @@ import {
   MoreHorizontal,
   RefreshCw,
   Filter,
+  Loader2,
 } from "lucide-react"
-import {
-  alertsSummaryStats,
-  alerts as rawAlerts,
-  alertTimelineEvents,
-  blacklistedVehicles as rawBlacklistedVehicles,
-} from "@/lib/fake-data"
 
-// Transform data for alerts page
-const summaryStats = alertsSummaryStats.map(stat => ({
-  ...stat,
-  icon: stat.icon === "Bell" ? Bell : stat.icon === "ShieldAlert" ? ShieldAlert : stat.icon === "ShieldX" ? ShieldX : CarFront,
-}))
+interface AlertItem {
+  id: number
+  vehicleNo: string
+  alertType: string
+  time: string
+  severity: "critical" | "warning" | "info"
+  status: string
+  location: string
+}
 
-// Transform alerts for the list
-const alertsList = rawAlerts.map(alert => ({
-  id: alert.id,
-  vehicleNo: alert.vehicleNo || "System",
-  alertType: alert.title,
-  time: alert.time,
-  severity: alert.severity === "critical" ? "critical" : alert.severity === "warning" ? "warning" : "info",
-  status: alert.status,
-  location: alert.location || "Unknown",
-}))
+interface TimelineEvent {
+  id: number
+  event: string
+  time: string
+  type: string
+}
 
-const recentTimeline = alertTimelineEvents
+interface BlacklistedVehicle {
+  id: number
+  vehicleNo: string
+  owner: string
+  reason: string
+  addedDate: string
+  status: string
+}
 
-const blacklistedVehicles = rawBlacklistedVehicles.slice(0, 5).map((v, i) => ({
-  id: i + 1,
-  vehicleNo: v.vehicleNo,
-  owner: v.owner,
-  reason: v.reason.split(" ").slice(0, 3).join(" "),
-  addedDate: v.addedOn,
-  status: v.status === "active" ? "active" : "inactive",
-}))
+interface SummaryStat {
+  label: string
+  value: string
+  icon: typeof Bell
+  trend: string
+  color: string
+  badge: { text: string; color: string } | null
+}
 
 const severityConfig = {
   critical: {
@@ -96,6 +99,69 @@ const statusConfig = {
 }
 
 export default function AlertsPage() {
+  const [alertsList, setAlertsList] = useState<AlertItem[]>([])
+  const [recentTimeline, setRecentTimeline] = useState<TimelineEvent[]>([])
+  const [blacklistedVehicles, setBlacklistedVehicles] = useState<BlacklistedVehicle[]>([])
+  const [summaryStats, setSummaryStats] = useState<SummaryStat[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchAlerts = async () => {
+      try {
+        const response = await fetch("/api/alerts")
+        const result = await response.json()
+        if (result.success) {
+          // Transform alerts for the list
+          const transformedAlerts = result.data.alerts.map((alert: { id: number; vehicleNo?: string; title: string; time: string; severity: string; status: string; location?: string }) => ({
+            id: alert.id,
+            vehicleNo: alert.vehicleNo || "System",
+            alertType: alert.title,
+            time: alert.time,
+            severity: alert.severity === "critical" ? "critical" : alert.severity === "warning" ? "warning" : "info",
+            status: alert.status,
+            location: alert.location || "Unknown",
+          }))
+          setAlertsList(transformedAlerts)
+          setRecentTimeline(result.data.timeline)
+          
+          // Transform blacklisted vehicles
+          const transformedBlacklisted = result.data.blacklisted.slice(0, 5).map((v: { vehicleNo: string; owner: string; reason: string; addedOn: string; status: string }, i: number) => ({
+            id: i + 1,
+            vehicleNo: v.vehicleNo,
+            owner: v.owner,
+            reason: v.reason.split(" ").slice(0, 3).join(" "),
+            addedDate: v.addedOn,
+            status: v.status === "active" ? "active" : "inactive",
+          }))
+          setBlacklistedVehicles(transformedBlacklisted)
+          
+          // Transform summary stats
+          const transformedStats = result.data.summary.map((stat: { label: string; value: string; icon: string; trend: string; color: string; badge: { text: string; color: string } | null }) => ({
+            ...stat,
+            icon: stat.icon === "Bell" ? Bell : stat.icon === "ShieldAlert" ? ShieldAlert : stat.icon === "ShieldX" ? ShieldX : CarFront,
+          }))
+          setSummaryStats(transformedStats)
+        }
+      } catch (error) {
+        console.error("Error fetching alerts:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchAlerts()
+  }, [])
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-lime-400" />
+          <span className="text-zinc-400">Loading alerts...</span>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex min-h-screen bg-zinc-950">
       {/* Ambient background effects */}

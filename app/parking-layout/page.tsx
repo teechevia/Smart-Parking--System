@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { ParkingSidebar } from "@/components/parking-sidebar"
 import {
   Car,
@@ -35,47 +35,12 @@ interface ZoneData {
   [key: string]: ParkingSlot[]
 }
 
-const parkingZones: ZoneData = {
-  A: [
-    { id: "A1", status: "occupied", vehicle: { number: "KA 01 AB 1234", owner: "John Doe", type: "Sedan", entryTime: "09:45 AM" } },
-    { id: "A2", status: "available" },
-    { id: "A3", status: "occupied", vehicle: { number: "MH 02 CD 5678", owner: "Sarah Wilson", type: "SUV", entryTime: "09:38 AM" } },
-    { id: "A4", status: "reserved", vehicle: { number: "Reserved", owner: "VIP Guest", type: "N/A", entryTime: "N/A" } },
-    { id: "A5", status: "available" },
-    { id: "A6", status: "faculty", vehicle: { number: "DL 03 EF 9012", owner: "Dr. Mike Chen", type: "Sedan", entryTime: "08:00 AM" } },
-    { id: "A7", status: "occupied", vehicle: { number: "TN 04 GH 3456", owner: "Emily Brown", type: "Hatchback", entryTime: "09:15 AM" } },
-    { id: "A8", status: "available" },
-  ],
-  B: [
-    { id: "B1", status: "available" },
-    { id: "B2", status: "occupied", vehicle: { number: "GJ 05 IJ 7890", owner: "David Park", type: "SUV", entryTime: "09:02 AM" } },
-    { id: "B3", status: "occupied", vehicle: { number: "RJ 06 KL 2345", owner: "Lisa Turner", type: "Sedan", entryTime: "08:55 AM" } },
-    { id: "B4", status: "available" },
-    { id: "B5", status: "reserved", vehicle: { number: "Reserved", owner: "Management", type: "N/A", entryTime: "N/A" } },
-    { id: "B6", status: "occupied", vehicle: { number: "UP 07 MN 6789", owner: "James Lee", type: "Hatchback", entryTime: "08:48 AM" } },
-    { id: "B7", status: "faculty", vehicle: { number: "HR 08 OP 0123", owner: "Prof. Anna White", type: "Sedan", entryTime: "07:45 AM" } },
-    { id: "B8", status: "available" },
-  ],
-  C: [
-    { id: "C1", status: "faculty", vehicle: { number: "MP 09 QR 4567", owner: "Dr. Robert Kim", type: "SUV", entryTime: "07:30 AM" } },
-    { id: "C2", status: "occupied", vehicle: { number: "WB 10 ST 8901", owner: "Chris Johnson", type: "Sedan", entryTime: "08:30 AM" } },
-    { id: "C3", status: "available" },
-    { id: "C4", status: "occupied", vehicle: { number: "AP 11 UV 2345", owner: "Nancy Davis", type: "Hatchback", entryTime: "08:22 AM" } },
-    { id: "C5", status: "occupied", vehicle: { number: "KL 12 WX 6789", owner: "Mark Wilson", type: "SUV", entryTime: "08:15 AM" } },
-    { id: "C6", status: "reserved", vehicle: { number: "Reserved", owner: "Executive", type: "N/A", entryTime: "N/A" } },
-    { id: "C7", status: "available" },
-    { id: "C8", status: "occupied", vehicle: { number: "PB 13 YZ 0123", owner: "Kate Miller", type: "Sedan", entryTime: "08:05 AM" } },
-  ],
-  D: [
-    { id: "D1", status: "available" },
-    { id: "D2", status: "available" },
-    { id: "D3", status: "occupied", vehicle: { number: "CH 14 AB 4567", owner: "Tom Harris", type: "SUV", entryTime: "07:55 AM" } },
-    { id: "D4", status: "faculty", vehicle: { number: "JK 15 CD 8901", owner: "Dr. Sam Clark", type: "Sedan", entryTime: "07:20 AM" } },
-    { id: "D5", status: "available" },
-    { id: "D6", status: "occupied", vehicle: { number: "GA 16 EF 2345", owner: "Rachel Green", type: "Hatchback", entryTime: "07:40 AM" } },
-    { id: "D7", status: "available" },
-    { id: "D8", status: "reserved", vehicle: { number: "Reserved", owner: "Visitor Bay", type: "N/A", entryTime: "N/A" } },
-  ],
+interface SlotSummary {
+  total: number
+  available: number
+  occupied: number
+  reserved: number
+  faculty: number
 }
 
 const slotStyles: Record<SlotStatus, { bg: string; border: string; shadow: string; text: string; icon: string }> = {
@@ -110,39 +75,46 @@ const slotStyles: Record<SlotStatus, { bg: string; border: string; shadow: strin
 }
 
 const slotLabels = [
-  { status: "available" as SlotStatus, label: "Available", color: "bg-lime-500", textColor: "text-lime-400", count: 0 },
-  { status: "occupied" as SlotStatus, label: "Occupied", color: "bg-zinc-600", textColor: "text-zinc-400", count: 0 },
-  { status: "reserved" as SlotStatus, label: "Reserved", color: "bg-amber-500", textColor: "text-amber-400", count: 0 },
-  { status: "faculty" as SlotStatus, label: "Faculty", color: "bg-sky-500", textColor: "text-sky-400", count: 0 },
-]
-
-// Calculate counts
-const countSlots = () => {
-  const counts: Record<SlotStatus, number> = { available: 0, occupied: 0, reserved: 0, faculty: 0 }
-  Object.values(parkingZones).forEach((zone) => {
-    zone.forEach((slot) => {
-      counts[slot.status]++
-    })
-  })
-  return counts
-}
-
-const slotCounts = countSlots()
-const totalSlots = Object.values(slotCounts).reduce((a, b) => a + b, 0)
-
-const stats = [
-  { label: "Total Slots", value: totalSlots, icon: ParkingCircle, color: "lime" },
-  { label: "Available", value: slotCounts.available, icon: CircleCheck, color: "lime" },
-  { label: "Occupied", value: slotCounts.occupied, icon: Car, color: "zinc" },
-  { label: "Reserved", value: slotCounts.reserved, icon: Bookmark, color: "amber" },
-  { label: "Faculty", value: slotCounts.faculty, icon: GraduationCap, color: "sky" },
+  { status: "available" as SlotStatus, label: "Available", color: "bg-lime-500", textColor: "text-lime-400" },
+  { status: "occupied" as SlotStatus, label: "Occupied", color: "bg-zinc-600", textColor: "text-zinc-400" },
+  { status: "reserved" as SlotStatus, label: "Reserved", color: "bg-amber-500", textColor: "text-amber-400" },
+  { status: "faculty" as SlotStatus, label: "Faculty", color: "bg-sky-500", textColor: "text-sky-400" },
 ]
 
 export default function ParkingLayoutPage() {
   const [selectedSlot, setSelectedSlot] = useState<ParkingSlot | null>(null)
   const [selectedZone, setSelectedZone] = useState<string>("all")
+  const [parkingZones, setParkingZones] = useState<ZoneData>({})
+  const [summary, setSummary] = useState<SlotSummary>({ total: 0, available: 0, occupied: 0, reserved: 0, faculty: 0 })
+  const [isLoading, setIsLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchParkingSlots = async () => {
+      try {
+        const response = await fetch("/api/parking-slots")
+        const result = await response.json()
+        if (result.success) {
+          setParkingZones(result.data.zones)
+          setSummary(result.data.summary)
+        }
+      } catch (error) {
+        console.error("Error fetching parking slots:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+    fetchParkingSlots()
+  }, [])
 
   const filteredZones = selectedZone === "all" ? parkingZones : { [selectedZone]: parkingZones[selectedZone] }
+
+  const stats = [
+    { label: "Total Slots", value: summary.total, icon: ParkingCircle, color: "lime" },
+    { label: "Available", value: summary.available, icon: CircleCheck, color: "lime" },
+    { label: "Occupied", value: summary.occupied, icon: Car, color: "zinc" },
+    { label: "Reserved", value: summary.reserved, icon: Bookmark, color: "amber" },
+    { label: "Faculty", value: summary.faculty, icon: GraduationCap, color: "sky" },
+  ]
 
   return (
     <div className="flex min-h-screen bg-zinc-950">
@@ -340,7 +312,7 @@ export default function ParkingLayoutPage() {
                     <div className={`h-4 w-4 rounded-md ${item.color}`} />
                     <span className={`text-sm font-medium ${item.textColor}`}>{item.label}</span>
                     <span className="rounded-full bg-zinc-700/50 px-2 py-0.5 text-xs font-semibold text-zinc-400">
-                      {slotCounts[item.status]}
+                      {summary[item.status]}
                     </span>
                   </div>
                 ))}

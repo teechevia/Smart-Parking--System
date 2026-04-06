@@ -25,7 +25,7 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import Image from "next/image"
-import { vehicleScanHistory, getRandomOCRResult, type AuthStatus } from "@/lib/fake-data"
+import { vehicleScanHistory, type AuthStatus } from "@/lib/fake-data"
 
 type ProcessingState = "idle" | "uploading" | "processing" | "complete"
 
@@ -85,30 +85,40 @@ export default function VehicleUploadPage() {
   const [isDragOver, setIsDragOver] = useState(false)
   const [vehicleDetails, setVehicleDetails] = useState<VehicleDetails | null>(null)
 
-  const simulateProcessing = useCallback(() => {
+  const handleDetectVehicle = useCallback(async () => {
     setProcessingState("uploading")
 
     setTimeout(() => {
       setProcessingState("processing")
     }, 1000)
 
-    setTimeout(() => {
-      const ocrResult = getRandomOCRResult()
-      setVehicleDetails({
-        vehicleNo: ocrResult.vehicleNo,
-        owner: ocrResult.owner,
-        type: ocrResult.type,
-        status: ocrResult.status,
-        slot: ocrResult.slot,
-        entryTime: new Date().toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: true,
-        }),
-        confidence: ocrResult.confidence,
+    // Call the detect-vehicle API
+    try {
+      const response = await fetch("/api/detect-vehicle", {
+        method: "POST",
       })
-      setProcessingState("complete")
-    }, 3000)
+      const result = await response.json()
+      
+      if (result.success) {
+        setVehicleDetails({
+          vehicleNo: result.data.vehicleNo,
+          owner: result.data.owner,
+          type: result.data.type,
+          status: result.data.status,
+          slot: result.data.slot,
+          entryTime: new Date().toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          }),
+          confidence: result.data.confidence,
+        })
+        setProcessingState("complete")
+      }
+    } catch (error) {
+      console.error("Error detecting vehicle:", error)
+      setProcessingState("idle")
+    }
   }, [])
 
   const handleDrop = useCallback(
@@ -121,12 +131,12 @@ export default function VehicleUploadPage() {
         const reader = new FileReader()
         reader.onload = (event) => {
           setUploadedImage(event.target?.result as string)
-          simulateProcessing()
+          handleDetectVehicle()
         }
         reader.readAsDataURL(file)
       }
     },
-    [simulateProcessing]
+    [handleDetectVehicle]
   )
 
   const handleFileSelect = useCallback(
@@ -136,12 +146,12 @@ export default function VehicleUploadPage() {
         const reader = new FileReader()
         reader.onload = (event) => {
           setUploadedImage(event.target?.result as string)
-          simulateProcessing()
+          handleDetectVehicle()
         }
         reader.readAsDataURL(file)
       }
     },
-    [simulateProcessing]
+    [handleDetectVehicle]
   )
 
   const resetUpload = () => {
