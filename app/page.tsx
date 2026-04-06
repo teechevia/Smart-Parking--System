@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { ParkingSidebar } from "@/components/parking-sidebar"
 import {
   Car,
@@ -15,59 +16,10 @@ import {
   Activity,
   User,
   Eye,
+  Loader2,
 } from "lucide-react"
 import Image from "next/image"
-import {
-  recentEntries,
-  alerts,
-  parkingZones,
-  vehicleTypesData,
-  zoneCapacityData,
-  hourlyUsageData,
-  dashboardStats,
-} from "@/lib/fake-data"
-
-const stats = [
-  {
-    label: "Total Slots",
-    value: dashboardStats.totalSlots.toString(),
-    icon: ParkingCircle,
-    trend: null,
-    color: "lime",
-    badge: null,
-  },
-  {
-    label: "Occupied Slots",
-    value: dashboardStats.occupiedSlots.toString(),
-    icon: Car,
-    trend: "+12",
-    color: "lime",
-    badge: { text: "Live", color: "lime" },
-  },
-  {
-    label: "Free Slots",
-    value: dashboardStats.freeSlots.toString(),
-    icon: CircleCheck,
-    trend: "-8",
-    color: "lime",
-    badge: null,
-  },
-  {
-    label: "Unauthorized",
-    value: dashboardStats.unauthorizedCount.toString(),
-    icon: ShieldAlert,
-    trend: "+2",
-    color: "red",
-    badge: { text: "Alert", color: "red" },
-  },
-]
-
-// Use first 3 zones for preview
-const parkingSlots = {
-  A: parkingZones.A.slice(0, 6),
-  B: parkingZones.B.slice(0, 6),
-  C: parkingZones.C.slice(0, 6),
-}
+import type { VehicleEntry, Alert, ParkingSlot, VehicleType, ZoneCapacity, HourlyUsage, DashboardStats } from "@/lib/fake-data"
 
 const slotColors: Record<string, string> = {
   available: "bg-lime-500 shadow-lime-500/50 shadow-lg",
@@ -83,22 +35,124 @@ const slotLabels = [
   { type: "faculty", label: "Faculty", color: "bg-sky-500", textColor: "text-sky-400" },
 ]
 
-// Transform hourly usage data for chart
-const usageData = hourlyUsageData.filter((_, i) => i % 2 === 0).map(d => ({ hour: d.hour.replace(" ", ""), usage: d.usage }))
-
-const vehicleTypes = vehicleTypesData.slice(0, 4)
-
-const liveMapZones = zoneCapacityData.slice(0, 4).map(z => ({
-  id: z.id,
-  name: z.name,
-  capacity: z.capacity,
-  occupied: z.occupied,
-}))
-
 export default function Page() {
-  const maxUsage = Math.max(...usageData.map((d) => d.usage))
+  const [isLoading, setIsLoading] = useState(true)
+  const [recentEntries, setRecentEntries] = useState<VehicleEntry[]>([])
+  const [alerts, setAlerts] = useState<Alert[]>([])
+  const [dashboardStats, setDashboardStats] = useState<DashboardStats | null>(null)
+  const [vehicleTypesData, setVehicleTypesData] = useState<VehicleType[]>([])
+  const [hourlyUsageData, setHourlyUsageData] = useState<HourlyUsage[]>([])
+  const [zoneCapacityData, setZoneCapacityData] = useState<ZoneCapacity[]>([])
+  const [parkingZones, setParkingZones] = useState<Record<string, ParkingSlot[]>>({})
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        // Fetch recent entries, stats, and other data
+        const [entriesRes, alertsRes, slotsRes] = await Promise.all([
+          fetch("/api/recent-entries"),
+          fetch("/api/alerts"),
+          fetch("/api/parking-slots"),
+        ])
+
+        const entriesData = await entriesRes.json()
+        const alertsData = await alertsRes.json()
+        const slotsData = await slotsRes.json()
+
+        if (entriesData.success) {
+          setRecentEntries(entriesData.data.entries)
+          setDashboardStats(entriesData.data.stats)
+          setVehicleTypesData(entriesData.data.vehicleTypes)
+          setHourlyUsageData(entriesData.data.hourlyUsage)
+          setZoneCapacityData(entriesData.data.zoneCapacity)
+        }
+
+        if (alertsData.success) {
+          setAlerts(alertsData.data.alerts.slice(0, 3))
+        }
+
+        if (slotsData.success) {
+          setParkingZones(slotsData.data.zones)
+        }
+      } catch (error) {
+        console.error("Error fetching dashboard data:", error)
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    fetchDashboardData()
+  }, [])
+
+  // Derive computed values from state
+  const stats = dashboardStats ? [
+    {
+      label: "Total Slots",
+      value: dashboardStats.totalSlots.toString(),
+      icon: ParkingCircle,
+      trend: null,
+      color: "lime",
+      badge: null,
+    },
+    {
+      label: "Occupied Slots",
+      value: dashboardStats.occupiedSlots.toString(),
+      icon: Car,
+      trend: "+12",
+      color: "lime",
+      badge: { text: "Live", color: "lime" },
+    },
+    {
+      label: "Free Slots",
+      value: dashboardStats.freeSlots.toString(),
+      icon: CircleCheck,
+      trend: "-8",
+      color: "lime",
+      badge: null,
+    },
+    {
+      label: "Unauthorized",
+      value: dashboardStats.unauthorizedCount.toString(),
+      icon: ShieldAlert,
+      trend: "+2",
+      color: "red",
+      badge: { text: "Alert", color: "red" },
+    },
+  ] : []
+
+  // Use first 3 zones for preview
+  const parkingSlots = {
+    A: parkingZones.A?.slice(0, 6) || [],
+    B: parkingZones.B?.slice(0, 6) || [],
+    C: parkingZones.C?.slice(0, 6) || [],
+  }
+
+  // Transform hourly usage data for chart
+  const usageData = hourlyUsageData.filter((_, i) => i % 2 === 0).map(d => ({ hour: d.hour.replace(" ", ""), usage: d.usage }))
+
+  const vehicleTypes = vehicleTypesData.slice(0, 4)
+
+  const liveMapZones = zoneCapacityData.slice(0, 4).map(z => ({
+    id: z.id,
+    name: z.name,
+    capacity: z.capacity,
+    occupied: z.occupied,
+  }))
+
+  const maxUsage = usageData.length > 0 ? Math.max(...usageData.map((d) => d.usage)) : 100
   const totalVehicles = vehicleTypes.reduce((acc, v) => acc + v.count, 0)
-  const occupancyRate = 75
+  const occupancyRate = dashboardStats?.occupancyRate || 75
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-12 w-12 animate-spin text-lime-400" />
+          <span className="text-zinc-400">Loading dashboard...</span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="flex min-h-screen bg-zinc-950">
@@ -474,7 +528,7 @@ export default function Page() {
                   <div className="relative flex items-start gap-4">
                     <div
                       className={`flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl transition-transform duration-300 group-hover/alert:scale-110 ${
-                        alert.severity === "high"
+                        alert.severity === "critical"
                           ? "bg-red-500/25 text-red-400 shadow-xl shadow-red-500/30"
                           : "bg-amber-500/25 text-amber-400 shadow-xl shadow-amber-500/30"
                       }`}
@@ -484,13 +538,13 @@ export default function Page() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-3">
                         <span className="text-lg font-bold text-white">{alert.title}</span>
-                        {alert.severity === "high" && (
+                        {alert.severity === "critical" && (
                           <span className="flex items-center gap-1.5 rounded-full border border-red-500/40 bg-red-500/20 px-3 py-1 text-xs font-bold text-red-400 shadow-md shadow-red-500/20">
                             <span className="relative flex h-1.5 w-1.5">
                               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
                               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-red-400" />
                             </span>
-                            Unauthorized
+                            Critical
                           </span>
                         )}
                       </div>
