@@ -466,3 +466,309 @@ export function getActiveBlacklistedVehicles(): BlacklistedVehicle[] {
 export function getRandomOCRResult() {
   return fakeOCRResults[Math.floor(Math.random() * fakeOCRResults.length)]
 }
+
+// ========================================
+// MUTABLE STATE MANAGEMENT FOR BACKEND
+// ========================================
+
+// Entry/Exit Log Types
+export interface EntryLog {
+  id: string
+  vehicleNo: string
+  owner: string
+  type: string
+  entryTime: string
+  assignedSlot: string | null
+  status: AuthStatus
+  confidence: number
+  gate: string
+}
+
+export interface ExitLog {
+  id: string
+  vehicleNo: string
+  owner: string
+  type: string
+  entryTime: string
+  exitTime: string
+  slot: string
+  duration: string
+  gate: string
+}
+
+// In-memory state (simulates database)
+let entryLogsState: EntryLog[] = []
+let exitLogsState: ExitLog[] = []
+let alertIdCounter = alerts.length + 1
+
+// Deep clone of parking zones to make it mutable
+let mutableParkingZones: Record<string, ParkingSlot[]> = JSON.parse(JSON.stringify(parkingZones))
+
+// Initialize entry logs from existing recentEntries
+recentEntries.forEach((entry, index) => {
+  entryLogsState.push({
+    id: `entry-init-${index + 1}`,
+    vehicleNo: entry.vehicleNo,
+    owner: entry.owner,
+    type: entry.type,
+    entryTime: entry.time,
+    assignedSlot: entry.slot,
+    status: "authorized",
+    confidence: 95 + Math.random() * 5,
+    gate: "Gate 1 - Main Entry",
+  })
+})
+
+// ========================================
+// PARKING SLOT MANAGEMENT
+// ========================================
+
+export function getFirstAvailableSlot(): { zone: string; slot: ParkingSlot } | null {
+  for (const [zoneName, slots] of Object.entries(mutableParkingZones)) {
+    for (const slot of slots) {
+      if (slot.status === "available") {
+        return { zone: zoneName, slot }
+      }
+    }
+  }
+  return null
+}
+
+export function assignSlotToVehicle(
+  slotId: string,
+  vehicle: { number: string; owner: string; type: string }
+): boolean {
+  for (const [, slots] of Object.entries(mutableParkingZones)) {
+    const slot = slots.find((s) => s.id === slotId)
+    if (slot && slot.status === "available") {
+      slot.status = "occupied"
+      slot.vehicle = {
+        number: vehicle.number,
+        owner: vehicle.owner,
+        type: vehicle.type,
+        entryTime: new Date().toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" }),
+      }
+      return true
+    }
+  }
+  return false
+}
+
+export function releaseSlot(vehicleNo: string): { success: boolean; slotId: string | null } {
+  for (const [, slots] of Object.entries(mutableParkingZones)) {
+    const slot = slots.find((s) => s.vehicle?.number === vehicleNo)
+    if (slot) {
+      const slotId = slot.id
+      slot.status = "available"
+      slot.vehicle = undefined
+      return { success: true, slotId }
+    }
+  }
+  return { success: false, slotId: null }
+}
+
+export function getMutableParkingZones(): Record<string, ParkingSlot[]> {
+  return mutableParkingZones
+}
+
+// ========================================
+// ENTRY LOG MANAGEMENT
+// ========================================
+
+export function addEntryLog(log: EntryLog): void {
+  entryLogsState.unshift(log) // Add to beginning (most recent first)
+  if (entryLogsState.length > 100) {
+    entryLogsState = entryLogsState.slice(0, 100) // Keep last 100 entries
+  }
+}
+
+export function getEntryLogs(): EntryLog[] {
+  return [...entryLogsState]
+}
+
+export function getEntryLogByVehicle(vehicleNo: string): EntryLog | undefined {
+  return entryLogsState.find((log) => log.vehicleNo === vehicleNo)
+}
+
+// ========================================
+// EXIT LOG MANAGEMENT
+// ========================================
+
+export function addExitLog(log: ExitLog): void {
+  exitLogsState.unshift(log)
+  if (exitLogsState.length > 100) {
+    exitLogsState = exitLogsState.slice(0, 100)
+  }
+}
+
+export function getExitLogs(): ExitLog[] {
+  return [...exitLogsState]
+}
+
+export function removeEntryLog(vehicleNo: string): EntryLog | undefined {
+  const index = entryLogsState.findIndex((log) => log.vehicleNo === vehicleNo)
+  if (index !== -1) {
+    const [removed] = entryLogsState.splice(index, 1)
+    return removed
+  }
+  return undefined
+}
+
+// ========================================
+// ALERT MANAGEMENT
+// ========================================
+
+export function addAlert(alertData: Omit<Alert, "id">): Alert {
+  const newAlert: Alert = {
+    id: alertIdCounter++,
+    ...alertData,
+  }
+  alerts.unshift(newAlert)
+  return newAlert
+}
+
+export function getActiveAlerts(): Alert[] {
+  return alerts.filter((alert) => alert.status === "active")
+}
+
+// ========================================
+// PARKING STATUS CALCULATIONS
+// ========================================
+
+export function getParkingStatus(): {
+  totalSlots: number
+  occupiedSlots: number
+  freeSlots: number
+  reservedSlots: number
+  facultySlots: number
+  occupancyRate: number
+} {
+  let total = 0
+  let occupied = 0
+  let free = 0
+  let reserved = 0
+  let faculty = 0
+
+  Object.values(mutableParkingZones).forEach((zone) => {
+    zone.forEach((slot) => {
+      total++
+      switch (slot.status) {
+        case "occupied":
+          occupied++
+          break
+        case "available":
+          free++
+          break
+        case "reserved":
+          reserved++
+          break
+        case "faculty":
+          faculty++
+          break
+      }
+    })
+  })
+
+  return {
+    totalSlots: total,
+    occupiedSlots: occupied,
+    freeSlots: free,
+    reservedSlots: reserved,
+    facultySlots: faculty,
+    occupancyRate: total > 0 ? Math.round((occupied / total) * 100) : 0,
+  }
+}
+
+// ========================================
+// VEHICLE DATABASE CHECK
+// ========================================
+
+// Simulated registered vehicles database
+const registeredVehicles: Record<string, { owner: string; type: string; permitType: "standard" | "faculty" | "vip" }> = {
+  "KA 05 MX 7892": { owner: "Alex Thompson", type: "Sedan", permitType: "standard" },
+  "DL 22 CD 7890": { owner: "Jennifer Lee", type: "Hatchback", permitType: "standard" },
+  "GJ 09 EF 1234": { owner: "Maria Garcia", type: "SUV", permitType: "standard" },
+  "KA 01 AB 1234": { owner: "John Doe", type: "Sedan", permitType: "standard" },
+  "MH 02 CD 5678": { owner: "Sarah Wilson", type: "SUV", permitType: "standard" },
+  "DL 03 EF 9012": { owner: "Dr. Mike Chen", type: "Sedan", permitType: "faculty" },
+  "TN 04 GH 3456": { owner: "Emily Brown", type: "Hatchback", permitType: "standard" },
+  "GJ 05 IJ 7890": { owner: "David Park", type: "SUV", permitType: "standard" },
+  "RJ 06 KL 2345": { owner: "Lisa Turner", type: "Sedan", permitType: "standard" },
+  "UP 07 MN 6789": { owner: "James Lee", type: "Hatchback", permitType: "standard" },
+  "HR 08 OP 0123": { owner: "Prof. Anna White", type: "Sedan", permitType: "faculty" },
+  "MP 09 QR 4567": { owner: "Dr. Robert Kim", type: "SUV", permitType: "faculty" },
+  "WB 10 ST 8901": { owner: "Chris Johnson", type: "Sedan", permitType: "standard" },
+  "AP 11 UV 2345": { owner: "Nancy Davis", type: "Hatchback", permitType: "standard" },
+  "KL 12 WX 6789": { owner: "Mark Wilson", type: "SUV", permitType: "standard" },
+  "PB 13 YZ 0123": { owner: "Kate Miller", type: "Sedan", permitType: "standard" },
+  "CH 14 AB 4567": { owner: "Tom Harris", type: "SUV", permitType: "standard" },
+  "JK 15 CD 8901": { owner: "Dr. Sam Clark", type: "Sedan", permitType: "faculty" },
+  "GA 16 EF 2345": { owner: "Rachel Green", type: "Hatchback", permitType: "standard" },
+}
+
+// Blacklisted vehicle numbers (from blacklistedVehicles)
+const blacklistedNumbers = blacklistedVehicles
+  .filter((v) => v.status === "active")
+  .map((v) => v.vehicleNo)
+
+export function checkVehicleStatus(vehicleNo: string): {
+  status: AuthStatus
+  owner: string
+  type: string
+  permitType?: string
+} {
+  // Check if blacklisted
+  if (blacklistedNumbers.includes(vehicleNo)) {
+    return { status: "blacklisted", owner: "Blocked User", type: "Unknown" }
+  }
+
+  // Check if registered
+  const registered = registeredVehicles[vehicleNo]
+  if (registered) {
+    return {
+      status: "authorized",
+      owner: registered.owner,
+      type: registered.type,
+      permitType: registered.permitType,
+    }
+  }
+
+  // Unknown vehicle
+  return { status: "unauthorized", owner: "Unknown", type: "Unknown" }
+}
+
+export function generateVehicleNo(): string {
+  const states = ["KA", "MH", "DL", "TN", "GJ", "RJ", "UP", "WB", "AP", "HR"]
+  const state = states[Math.floor(Math.random() * states.length)]
+  const district = String(Math.floor(Math.random() * 99) + 1).padStart(2, "0")
+  const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ"
+  const series = letters[Math.floor(Math.random() * letters.length)] + letters[Math.floor(Math.random() * letters.length)]
+  const number = String(Math.floor(Math.random() * 9999) + 1).padStart(4, "0")
+  return `${state} ${district} ${series} ${number}`
+}
+
+export function calculateDuration(entryTime: string, exitTime: string): string {
+  // Simple duration calculation for demo (assuming same day)
+  const parseTime = (timeStr: string) => {
+    const match = timeStr.match(/(\d+):(\d+)\s*(AM|PM)/i)
+    if (!match) return 0
+    let hours = parseInt(match[1])
+    const minutes = parseInt(match[2])
+    const period = match[3].toUpperCase()
+    if (period === "PM" && hours !== 12) hours += 12
+    if (period === "AM" && hours === 12) hours = 0
+    return hours * 60 + minutes
+  }
+
+  const entryMinutes = parseTime(entryTime)
+  const exitMinutes = parseTime(exitTime)
+  let diff = exitMinutes - entryMinutes
+  if (diff < 0) diff += 24 * 60 // Handle overnight
+
+  const hours = Math.floor(diff / 60)
+  const minutes = diff % 60
+
+  if (hours === 0) return `${minutes}m`
+  if (minutes === 0) return `${hours}h`
+  return `${hours}h ${minutes}m`
+}
