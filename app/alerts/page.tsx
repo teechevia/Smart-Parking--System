@@ -18,198 +18,40 @@ import {
   RefreshCw,
   Filter,
 } from "lucide-react"
+import {
+  alertsSummaryStats,
+  alerts as rawAlerts,
+  alertTimelineEvents,
+  blacklistedVehicles as rawBlacklistedVehicles,
+} from "@/lib/fake-data"
 
-const summaryStats = [
-  {
-    label: "Total Alerts",
-    value: "47",
-    icon: Bell,
-    trend: "+8 today",
-    color: "lime",
-    badge: { text: "Live", color: "lime" },
-  },
-  {
-    label: "Unauthorized Vehicles",
-    value: "12",
-    icon: ShieldAlert,
-    trend: "+3 today",
-    color: "red",
-    badge: { text: "Critical", color: "red" },
-  },
-  {
-    label: "Blacklisted Vehicles",
-    value: "5",
-    icon: ShieldX,
-    trend: "2 active",
-    color: "red",
-    badge: null,
-  },
-  {
-    label: "Reserved Violations",
-    value: "8",
-    icon: CarFront,
-    trend: "+2 today",
-    color: "amber",
-    badge: { text: "Warning", color: "amber" },
-  },
-]
+// Transform data for alerts page
+const summaryStats = alertsSummaryStats.map(stat => ({
+  ...stat,
+  icon: stat.icon === "Bell" ? Bell : stat.icon === "ShieldAlert" ? ShieldAlert : stat.icon === "ShieldX" ? ShieldX : CarFront,
+}))
 
-const alertsList = [
-  {
-    id: 1,
-    vehicleNo: "KA 05 MX 9821",
-    alertType: "Unauthorized Vehicle",
-    time: "Just now",
-    severity: "critical",
-    status: "active",
-    location: "Zone B - Slot B7",
-  },
-  {
-    id: 2,
-    vehicleNo: "MH 12 AB 3456",
-    alertType: "Blacklisted Vehicle",
-    time: "2 min ago",
-    severity: "critical",
-    status: "active",
-    location: "Zone A - Entry Gate",
-  },
-  {
-    id: 3,
-    vehicleNo: "DL 08 CD 7890",
-    alertType: "Reserved Slot Violation",
-    time: "8 min ago",
-    severity: "warning",
-    status: "active",
-    location: "Zone C - Slot C12",
-  },
-  {
-    id: 4,
-    vehicleNo: "TN 22 EF 1234",
-    alertType: "Overstay Warning",
-    time: "15 min ago",
-    severity: "warning",
-    status: "active",
-    location: "Zone A - Slot A15",
-  },
-  {
-    id: 5,
-    vehicleNo: "GJ 01 GH 5678",
-    alertType: "Faculty Slot Violation",
-    time: "22 min ago",
-    severity: "warning",
-    status: "resolved",
-    location: "Zone D - Slot D3",
-  },
-  {
-    id: 6,
-    vehicleNo: "System",
-    alertType: "Sensor Offline",
-    time: "35 min ago",
-    severity: "info",
-    status: "active",
-    location: "Zone B - Slot B22",
-  },
-  {
-    id: 7,
-    vehicleNo: "KA 09 IJ 2345",
-    alertType: "Unauthorized Vehicle",
-    time: "1 hr ago",
-    severity: "critical",
-    status: "resolved",
-    location: "Zone A - Slot A8",
-  },
-  {
-    id: 8,
-    vehicleNo: "MH 04 KL 6789",
-    alertType: "Payment Pending",
-    time: "2 hrs ago",
-    severity: "info",
-    status: "resolved",
-    location: "Zone C - Exit Gate",
-  },
-]
+// Transform alerts for the list
+const alertsList = rawAlerts.map(alert => ({
+  id: alert.id,
+  vehicleNo: alert.vehicleNo || "System",
+  alertType: alert.title,
+  time: alert.time,
+  severity: alert.severity === "critical" ? "critical" : alert.severity === "warning" ? "warning" : "info",
+  status: alert.status,
+  location: alert.location || "Unknown",
+}))
 
-const recentTimeline = [
-  {
-    id: 1,
-    event: "Unauthorized vehicle detected in Zone B",
-    time: "09:45 AM",
-    type: "critical",
-  },
-  {
-    id: 2,
-    event: "Blacklisted vehicle KA 05 MX 9821 attempted entry",
-    time: "09:42 AM",
-    type: "critical",
-  },
-  {
-    id: 3,
-    event: "Reserved slot violation resolved - Zone C",
-    time: "09:38 AM",
-    type: "resolved",
-  },
-  {
-    id: 4,
-    event: "New overstay warning issued for Slot A15",
-    time: "09:30 AM",
-    type: "warning",
-  },
-  {
-    id: 5,
-    event: "Sensor malfunction detected in Zone B",
-    time: "09:22 AM",
-    type: "info",
-  },
-  {
-    id: 6,
-    event: "Faculty slot violation detected - Zone D",
-    time: "09:15 AM",
-    type: "warning",
-  },
-]
+const recentTimeline = alertTimelineEvents
 
-const blacklistedVehicles = [
-  {
-    id: 1,
-    vehicleNo: "KA 05 MX 9821",
-    owner: "Unknown",
-    reason: "Multiple violations",
-    addedDate: "Mar 15, 2024",
-    status: "active",
-  },
-  {
-    id: 2,
-    vehicleNo: "MH 12 AB 3456",
-    owner: "John Smith",
-    reason: "Payment fraud",
-    addedDate: "Feb 28, 2024",
-    status: "active",
-  },
-  {
-    id: 3,
-    vehicleNo: "DL 01 XY 9999",
-    owner: "Mike Johnson",
-    reason: "Repeated unauthorized access",
-    addedDate: "Jan 10, 2024",
-    status: "active",
-  },
-  {
-    id: 4,
-    vehicleNo: "TN 09 PQ 4567",
-    owner: "Sarah Lee",
-    reason: "Property damage",
-    addedDate: "Dec 05, 2023",
-    status: "inactive",
-  },
-  {
-    id: 5,
-    vehicleNo: "GJ 18 RS 8901",
-    owner: "David Brown",
-    reason: "Permit violation",
-    addedDate: "Nov 20, 2023",
-    status: "inactive",
-  },
-]
+const blacklistedVehicles = rawBlacklistedVehicles.slice(0, 5).map((v, i) => ({
+  id: i + 1,
+  vehicleNo: v.vehicleNo,
+  owner: v.owner,
+  reason: v.reason.split(" ").slice(0, 3).join(" "),
+  addedDate: v.addedOn,
+  status: v.status === "active" ? "active" : "inactive",
+}))
 
 const severityConfig = {
   critical: {

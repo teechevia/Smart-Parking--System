@@ -10,21 +10,27 @@ import {
   Clock,
   ArrowUpRight,
   TrendingUp,
-  Truck,
-  Bike,
   Zap,
   MapPin,
   Activity,
   User,
-  CalendarDays,
   Eye,
 } from "lucide-react"
 import Image from "next/image"
+import {
+  recentEntries,
+  alerts,
+  parkingZones,
+  vehicleTypesData,
+  zoneCapacityData,
+  hourlyUsageData,
+  dashboardStats,
+} from "@/lib/fake-data"
 
 const stats = [
   {
     label: "Total Slots",
-    value: "248",
+    value: dashboardStats.totalSlots.toString(),
     icon: ParkingCircle,
     trend: null,
     color: "lime",
@@ -32,7 +38,7 @@ const stats = [
   },
   {
     label: "Occupied Slots",
-    value: "186",
+    value: dashboardStats.occupiedSlots.toString(),
     icon: Car,
     trend: "+12",
     color: "lime",
@@ -40,7 +46,7 @@ const stats = [
   },
   {
     label: "Free Slots",
-    value: "54",
+    value: dashboardStats.freeSlots.toString(),
     icon: CircleCheck,
     trend: "-8",
     color: "lime",
@@ -48,7 +54,7 @@ const stats = [
   },
   {
     label: "Unauthorized",
-    value: "8",
+    value: dashboardStats.unauthorizedCount.toString(),
     icon: ShieldAlert,
     trend: "+2",
     color: "red",
@@ -56,98 +62,11 @@ const stats = [
   },
 ]
 
-const recentEntries = [
-  {
-    vehicleNo: "KA 01 AB 1234",
-    owner: "John Doe",
-    type: "Sedan",
-    time: "09:45 AM",
-    slot: "A1",
-    status: "active",
-  },
-  {
-    vehicleNo: "MH 02 CD 5678",
-    owner: "Sarah Wilson",
-    type: "SUV",
-    time: "09:38 AM",
-    slot: "A2",
-    status: "active",
-  },
-  {
-    vehicleNo: "DL 03 EF 9012",
-    owner: "Mike Chen",
-    type: "Hatchback",
-    time: "09:22 AM",
-    slot: "B1",
-    status: "active",
-  },
-  {
-    vehicleNo: "TN 04 GH 3456",
-    owner: "Emily Brown",
-    type: "Sedan",
-    time: "09:15 AM",
-    slot: "B2",
-    status: "active",
-  },
-  {
-    vehicleNo: "GJ 05 IJ 7890",
-    owner: "David Park",
-    type: "SUV",
-    time: "09:02 AM",
-    slot: "C1",
-    status: "active",
-  },
-]
-
-const alerts = [
-  {
-    id: 1,
-    title: "Unauthorized Vehicle Detected",
-    description: "Slot B-07 - Vehicle without valid permit detected by AI camera",
-    time: "Just now",
-    severity: "high",
-  },
-  {
-    id: 2,
-    title: "Overstay Warning",
-    description: "Slot A-15 - Vehicle exceeded maximum 4-hour parking limit",
-    time: "5 min ago",
-    severity: "medium",
-  },
-  {
-    id: 3,
-    title: "Sensor Malfunction",
-    description: "Slot C-22 - Ground proximity sensor offline since 8:45 AM",
-    time: "12 min ago",
-    severity: "high",
-  },
-]
-
+// Use first 3 zones for preview
 const parkingSlots = {
-  A: [
-    { id: "A1", status: "occupied" },
-    { id: "A2", status: "available" },
-    { id: "A3", status: "occupied" },
-    { id: "A4", status: "reserved" },
-    { id: "A5", status: "available" },
-    { id: "A6", status: "faculty" },
-  ],
-  B: [
-    { id: "B1", status: "available" },
-    { id: "B2", status: "occupied" },
-    { id: "B3", status: "occupied" },
-    { id: "B4", status: "available" },
-    { id: "B5", status: "reserved" },
-    { id: "B6", status: "occupied" },
-  ],
-  C: [
-    { id: "C1", status: "faculty" },
-    { id: "C2", status: "occupied" },
-    { id: "C3", status: "available" },
-    { id: "C4", status: "occupied" },
-    { id: "C5", status: "occupied" },
-    { id: "C6", status: "reserved" },
-  ],
+  A: parkingZones.A.slice(0, 6),
+  B: parkingZones.B.slice(0, 6),
+  C: parkingZones.C.slice(0, 6),
 }
 
 const slotColors: Record<string, string> = {
@@ -164,30 +83,17 @@ const slotLabels = [
   { type: "faculty", label: "Faculty", color: "bg-sky-500", textColor: "text-sky-400" },
 ]
 
-const usageData = [
-  { hour: "6AM", usage: 20 },
-  { hour: "8AM", usage: 65 },
-  { hour: "10AM", usage: 85 },
-  { hour: "12PM", usage: 92 },
-  { hour: "2PM", usage: 88 },
-  { hour: "4PM", usage: 78 },
-  { hour: "6PM", usage: 45 },
-  { hour: "8PM", usage: 25 },
-]
+// Transform hourly usage data for chart
+const usageData = hourlyUsageData.filter((_, i) => i % 2 === 0).map(d => ({ hour: d.hour.replace(" ", ""), usage: d.usage }))
 
-const vehicleTypes = [
-  { type: "Sedan", count: 98, color: "#84cc16", percentage: 53 },
-  { type: "SUV", count: 52, color: "#38bdf8", percentage: 28 },
-  { type: "Hatchback", count: 28, color: "#fbbf24", percentage: 15 },
-  { type: "Two Wheeler", count: 8, color: "#a78bfa", percentage: 4 },
-]
+const vehicleTypes = vehicleTypesData.slice(0, 4)
 
-const liveMapZones = [
-  { id: "A", name: "Zone A", capacity: 62, occupied: 48 },
-  { id: "B", name: "Zone B", capacity: 62, occupied: 56 },
-  { id: "C", name: "Zone C", capacity: 62, occupied: 42 },
-  { id: "D", name: "Zone D", capacity: 62, occupied: 40 },
-]
+const liveMapZones = zoneCapacityData.slice(0, 4).map(z => ({
+  id: z.id,
+  name: z.name,
+  capacity: z.capacity,
+  occupied: z.occupied,
+}))
 
 export default function Page() {
   const maxUsage = Math.max(...usageData.map((d) => d.usage))

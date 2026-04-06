@@ -25,62 +25,29 @@ import {
   AlertTriangle,
 } from "lucide-react"
 import Image from "next/image"
+import { vehicleScanHistory, getRandomOCRResult, type AuthStatus } from "@/lib/fake-data"
 
-type AuthStatus = "authorized" | "unauthorized" | "blacklisted" | null
 type ProcessingState = "idle" | "uploading" | "processing" | "complete"
 
 interface VehicleDetails {
   vehicleNo: string
   owner: string
   type: string
-  status: AuthStatus
+  status: AuthStatus | null
   slot: string | null
   entryTime: string
   confidence: number
 }
 
-const recentScans = [
-  {
-    vehicleNo: "KA 01 AB 1234",
-    owner: "John Doe",
-    type: "Sedan",
-    time: "09:45 AM",
-    status: "authorized" as AuthStatus,
-    confidence: 98,
-  },
-  {
-    vehicleNo: "MH 02 CD 5678",
-    owner: "Sarah Wilson",
-    type: "SUV",
-    time: "09:38 AM",
-    status: "authorized" as AuthStatus,
-    confidence: 95,
-  },
-  {
-    vehicleNo: "DL 03 EF 9012",
-    owner: "Unknown",
-    type: "Hatchback",
-    time: "09:22 AM",
-    status: "unauthorized" as AuthStatus,
-    confidence: 92,
-  },
-  {
-    vehicleNo: "TN 04 GH 3456",
-    owner: "Mike Chen",
-    type: "Sedan",
-    time: "09:15 AM",
-    status: "authorized" as AuthStatus,
-    confidence: 99,
-  },
-  {
-    vehicleNo: "GJ 05 IJ 7890",
-    owner: "Blacklisted",
-    type: "SUV",
-    time: "09:02 AM",
-    status: "blacklisted" as AuthStatus,
-    confidence: 97,
-  },
-]
+// Transform vehicle scan history for recent scans table
+const recentScans = vehicleScanHistory.slice(0, 5).map(scan => ({
+  vehicleNo: scan.vehicleNo,
+  owner: scan.owner,
+  type: scan.type,
+  time: scan.timestamp.split(" ")[0] + " " + scan.timestamp.split(" ")[1],
+  status: scan.status,
+  confidence: Math.round(scan.confidence),
+}))
 
 const statusConfig = {
   authorized: {
@@ -126,18 +93,19 @@ export default function VehicleUploadPage() {
     }, 1000)
 
     setTimeout(() => {
+      const ocrResult = getRandomOCRResult()
       setVehicleDetails({
-        vehicleNo: "KA 05 MX 7892",
-        owner: "Alex Thompson",
-        type: "Sedan",
-        status: "authorized",
-        slot: "A-12",
+        vehicleNo: ocrResult.vehicleNo,
+        owner: ocrResult.owner,
+        type: ocrResult.type,
+        status: ocrResult.status,
+        slot: ocrResult.slot,
         entryTime: new Date().toLocaleTimeString("en-US", {
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
         }),
-        confidence: 97,
+        confidence: ocrResult.confidence,
       })
       setProcessingState("complete")
     }, 3000)

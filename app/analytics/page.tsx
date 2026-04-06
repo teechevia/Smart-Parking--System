@@ -17,106 +17,33 @@ import {
   ArrowDownRight,
   Zap,
 } from "lucide-react"
+import {
+  analyticsSummaryStats,
+  hourlyUsageData as rawHourlyData,
+  vehicleTypesData,
+  occupancyData,
+  zoneCapacityData,
+  frequentVehicles,
+  peakTrafficTimes,
+  trendData,
+} from "@/lib/fake-data"
 
-const summaryStats = [
-  {
-    label: "Total Vehicles Today",
-    value: "1,247",
-    icon: Car,
-    trend: "+18%",
-    trendUp: true,
-    color: "lime",
-    badge: { text: "Live", color: "lime" },
-  },
-  {
-    label: "Peak Hour",
-    value: "12:00 PM",
-    icon: Clock,
-    subtext: "1,890 vehicles",
-    color: "sky",
-    badge: null,
-  },
-  {
-    label: "Average Occupancy",
-    value: "78.4%",
-    icon: TrendingUp,
-    trend: "+5.2%",
-    trendUp: true,
-    color: "amber",
-    badge: { text: "High", color: "amber" },
-  },
-  {
-    label: "Unauthorized Attempts",
-    value: "23",
-    icon: ShieldAlert,
-    trend: "-12%",
-    trendUp: false,
-    color: "red",
-    badge: { text: "Alert", color: "red" },
-  },
-]
+// Transform data for analytics charts
+const summaryStats = analyticsSummaryStats.map(stat => ({
+  ...stat,
+  icon: stat.icon === "Car" ? Car : stat.icon === "Clock" ? Clock : stat.icon === "TrendingUp" ? TrendingUp : ShieldAlert,
+}))
 
-const hourlyUsageData = [
-  { hour: "6 AM", value: 120, percentage: 12 },
-  { hour: "7 AM", value: 340, percentage: 34 },
-  { hour: "8 AM", value: 680, percentage: 68 },
-  { hour: "9 AM", value: 890, percentage: 89 },
-  { hour: "10 AM", value: 920, percentage: 92 },
-  { hour: "11 AM", value: 980, percentage: 98 },
-  { hour: "12 PM", value: 1000, percentage: 100 },
-  { hour: "1 PM", value: 960, percentage: 96 },
-  { hour: "2 PM", value: 880, percentage: 88 },
-  { hour: "3 PM", value: 820, percentage: 82 },
-  { hour: "4 PM", value: 750, percentage: 75 },
-  { hour: "5 PM", value: 680, percentage: 68 },
-  { hour: "6 PM", value: 520, percentage: 52 },
-  { hour: "7 PM", value: 380, percentage: 38 },
-  { hour: "8 PM", value: 240, percentage: 24 },
-  { hour: "9 PM", value: 150, percentage: 15 },
-]
+const hourlyUsageData = rawHourlyData
 
-const vehicleTypeData = [
-  { type: "Sedan", count: 486, percentage: 39, color: "#84cc16" },
-  { type: "SUV", count: 362, percentage: 29, color: "#38bdf8" },
-  { type: "Hatchback", count: 224, percentage: 18, color: "#fbbf24" },
-  { type: "Two Wheeler", count: 112, percentage: 9, color: "#a78bfa" },
-  { type: "Truck/Van", count: 63, percentage: 5, color: "#f87171" },
-]
+const vehicleTypeData = vehicleTypesData
 
-const occupancyData = {
-  occupied: 186,
-  free: 62,
-  total: 248,
-}
-
-const zoneHeatmapData = [
-  { zone: "A", name: "Zone A - Main Entry", usage: 94, vehicles: 58 },
-  { zone: "B", name: "Zone B - East Wing", usage: 87, vehicles: 54 },
-  { zone: "C", name: "Zone C - West Wing", usage: 72, vehicles: 45 },
-  { zone: "D", name: "Zone D - Basement", usage: 65, vehicles: 40 },
-  { zone: "E", name: "Zone E - Rooftop", usage: 48, vehicles: 30 },
-  { zone: "F", name: "Zone F - VIP Section", usage: 82, vehicles: 28 },
-]
-
-const frequentVehicles = [
-  { rank: 1, vehicleNo: "KA 01 AB 1234", owner: "John Doe", visits: 156, avgDuration: "4.2h", type: "Sedan" },
-  { rank: 2, vehicleNo: "MH 02 CD 5678", owner: "Sarah Wilson", visits: 142, avgDuration: "6.8h", type: "SUV" },
-  { rank: 3, vehicleNo: "DL 03 EF 9012", owner: "Mike Chen", visits: 128, avgDuration: "3.5h", type: "Hatchback" },
-  { rank: 4, vehicleNo: "TN 04 GH 3456", owner: "Emily Brown", visits: 115, avgDuration: "5.1h", type: "Sedan" },
-  { rank: 5, vehicleNo: "GJ 05 IJ 7890", owner: "David Park", visits: 98, avgDuration: "7.2h", type: "SUV" },
-]
-
-const peakTrafficTimes = [
-  { time: "08:30 - 09:30 AM", label: "Morning Rush", intensity: 95 },
-  { time: "12:00 - 01:00 PM", label: "Lunch Peak", intensity: 100 },
-  { time: "05:00 - 06:00 PM", label: "Evening Exit", intensity: 88 },
-]
-
-const trendData = {
-  daily: { value: "1,247", change: "+8%", direction: "up" },
-  weekly: { value: "8,432", change: "+12%", direction: "up" },
-  monthly: { value: "34,567", change: "+15%", direction: "up" },
-}
+const zoneHeatmapData = zoneCapacityData.map(z => ({
+  zone: z.id,
+  name: z.name,
+  usage: z.usage,
+  vehicles: z.occupied,
+}))
 
 export default function AnalyticsPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<"daily" | "weekly" | "monthly">("daily")
