@@ -116,6 +116,14 @@ export default function ParkingLayoutPage() {
     { label: "Faculty", value: summary.faculty, icon: GraduationCap, color: "sky" },
   ]
 
+  const totalSlots = summary.total
+  const slotCounts = {
+    available: summary.available,
+    occupied: summary.occupied,
+    reserved: summary.reserved,
+    faculty: summary.faculty,
+  }
+
   return (
     <div className="flex min-h-screen bg-zinc-950">
       {/* Ambient background effects */}
