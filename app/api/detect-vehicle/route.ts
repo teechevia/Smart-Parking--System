@@ -206,15 +206,25 @@ export async function POST(request: Request) {
       console.log(`[OCR] Detected plate: ${vehicleNo} (${confidence.toFixed(1)}% confidence)`)
     }
     // ========================================================================
-    // HANDLE JSON (Legacy/Testing)
+    // HANDLE JSON (From client-side OCR or legacy/testing)
     // ========================================================================
     else if (contentType.includes("application/json")) {
       const body = await request.json()
-      vehicleNo = body.vehicleNo
       action = body.action || "entry"
-      confidence = 95 + Math.random() * 5
-
-      if (!vehicleNo) {
+      
+      // Check if OCR was performed client-side
+      if (body.vehicleNo) {
+        // Valid plate detected by client OCR
+        vehicleNo = body.vehicleNo
+        confidence = body.ocrConfidence || 95
+        console.log(`[detect-vehicle] Using client OCR result: ${vehicleNo} (${confidence}% confidence)`)
+      } else if (body.usedFallback || body.vehicleNo === null) {
+        // OCR failed to detect plate - generate fake data
+        console.log(`[detect-vehicle] OCR fallback - generating fake plate. Raw text: ${body.rawOcrText?.substring(0, 50)}...`)
+        const ocrResult = await processImageOCR(Buffer.from([]), "image/jpeg")
+        vehicleNo = ocrResult.vehicleNo
+        confidence = ocrResult.confidence
+      } else {
         return NextResponse.json(
           { success: false, error: "Vehicle number is required" },
           { status: 400 }

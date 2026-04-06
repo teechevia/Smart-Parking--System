@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { ParkingSidebar } from "@/components/parking-sidebar"
 import {
   Upload,
@@ -24,8 +24,11 @@ import {
   Activity,
   AlertTriangle,
   FileWarning,
+  FileText,
+  Search,
 } from "lucide-react"
 import Image from "next/image"
+import { createWorker, Worker } from "tesseract.js"
 import { vehicleScanHistory, type AuthStatus } from "@/lib/fake-data"
 
 type ProcessingState = "idle" | "uploading" | "processing" | "complete"
@@ -33,6 +36,15 @@ type ProcessingState = "idle" | "uploading" | "processing" | "complete"
 // Allowed file types
 const ALLOWED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png"]
 const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png"]
+
+// Indian vehicle number plate patterns
+// Format: SS DD SS DDDD or SS DD S DDDD (S=State, D=District, S=Series, D=Number)
+// Examples: UP16AB1234, DL8CAF9021, HR26DK8331, KA05MX7892
+const VEHICLE_PLATE_PATTERNS = [
+  /([A-Z]{2})\s*(\d{1,2})\s*([A-Z]{1,3})\s*(\d{1,4})/gi,  // Standard format with possible spaces
+  /([A-Z]{2})(\d{1,2})([A-Z]{1,3})(\d{1,4})/gi,           // No spaces
+  /([A-Z]{2})\s*(\d{2})\s*([A-Z]{2})\s*(\d{4})/gi,        // Common 4-part format
+]
 
 interface VehicleDetails {
   vehicleNo: string
@@ -48,7 +60,14 @@ interface VehicleDetails {
 
 interface FileError {
   message: string
-  type: "invalid_type" | "too_large" | "upload_failed"
+  type: "invalid_type" | "too_large" | "upload_failed" | "ocr_failed"
+}
+
+interface OCRResult {
+  rawText: string
+  detectedPlate: string | null
+  confidence: number
+  usedFallback: boolean
 }
 
 // Transform vehicle scan history for recent scans table
@@ -100,6 +119,118 @@ export default function VehicleUploadPage() {
   const [fileError, setFileError] = useState<FileError | null>(null)
   const [uploadSuccess, setUploadSuccess] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  
+  // OCR specific state
+  const [ocrResult, setOcrResult] = useState<OCRResult | null>(null)
+  const [ocrProgress, setOcrProgress] = useState<number>(0)
+  const [ocrStatus, setOcrStatus] = useState<string>("")
+  const workerRef = useRef<Worker | null>(null)
+
+  // Initialize Tesseract worker
+  useEffect(() => {
+    const initWorker = async () => {
+      const worker = await createWorker("eng", 1, {
+        logger: (m) => {
+          if (m.status === "recognizing text") {
+            setOcrProgress(Math.round(m.progress * 100))
+            setOcrStatus("Recognizing text...")
+          } else if (m.status === "loading tesseract core") {
+            setOcrStatus("Loading OCR engine...")
+          } else if (m.status === "initializing tesseract") {
+            setOcrStatus("Initializing...")
+          } else if (m.status === "loading language traineddata") {
+            setOcrStatus("Loading language data...")
+          }
+        },
+      })
+      workerRef.current = worker
+    }
+    initWorker()
+
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate()
+      }
+    }
+  }, [])
+
+  // Extract vehicle plate from OCR text using regex patterns
+  const extractVehiclePlate = (text: string): string | null => {
+    // Clean the text - remove newlines, extra spaces, and common OCR errors
+    const cleanedText = text
+      .toUpperCase()
+      .replace(/[^A-Z0-9\s]/g, "") // Remove special characters except spaces
+      .replace(/\s+/g, " ")        // Normalize spaces
+      .trim()
+
+    // Try each pattern
+    for (const pattern of VEHICLE_PLATE_PATTERNS) {
+      pattern.lastIndex = 0 // Reset regex state
+      const matches = cleanedText.matchAll(pattern)
+      
+      for (const match of matches) {
+        if (match) {
+          // Format the plate number: SS DD SS DDDD
+          const state = match[1]
+          const district = match[2].padStart(2, "0")
+          const series = match[3]
+          const number = match[4].padStart(4, "0")
+          return `${state} ${district} ${series} ${number}`
+        }
+      }
+    }
+
+    // If no pattern matched, try to find any alphanumeric sequence that looks like a plate
+    const simplePattern = /[A-Z]{2}\d{1,2}[A-Z]{1,3}\d{1,4}/g
+    const simpleMatch = cleanedText.replace(/\s/g, "").match(simplePattern)
+    if (simpleMatch && simpleMatch[0]) {
+      const plate = simpleMatch[0]
+      // Try to format it nicely
+      const formatted = plate.replace(/([A-Z]{2})(\d{1,2})([A-Z]{1,3})(\d+)/, "$1 $2 $3 $4")
+      return formatted
+    }
+
+    return null
+  }
+
+  // Run OCR on the uploaded image
+  const runOCR = async (imageData: string): Promise<OCRResult> => {
+    if (!workerRef.current) {
+      throw new Error("OCR engine not initialized")
+    }
+
+    setOcrStatus("Starting OCR...")
+    setOcrProgress(0)
+
+    try {
+      const result = await workerRef.current.recognize(imageData)
+      const rawText = result.data.text
+      const confidence = result.data.confidence
+
+      // Try to extract vehicle plate from the OCR result
+      const detectedPlate = extractVehiclePlate(rawText)
+
+      if (detectedPlate) {
+        return {
+          rawText,
+          detectedPlate,
+          confidence,
+          usedFallback: false,
+        }
+      }
+
+      // No valid plate detected - will use fallback
+      return {
+        rawText,
+        detectedPlate: null,
+        confidence,
+        usedFallback: true,
+      }
+    } catch (error) {
+      console.error("OCR Error:", error)
+      throw error
+    }
+  }
 
   // Validate file type
   const validateFile = (file: File): boolean => {
@@ -149,31 +280,58 @@ export default function VehicleUploadPage() {
     reader.readAsDataURL(file)
   }
 
-  // Detect vehicle using FormData with the uploaded image
+  // Detect vehicle using Tesseract.js OCR
   const handleDetectVehicle = useCallback(async () => {
-    if (!selectedFile) return
+    if (!selectedFile || !uploadedImage) return
 
     setProcessingState("uploading")
     setFileError(null)
+    setOcrResult(null)
+    setOcrProgress(0)
 
-    setTimeout(() => {
-      setProcessingState("processing")
-    }, 1000)
+    // Short delay to show uploading state
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    setProcessingState("processing")
 
     try {
-      // Create FormData with the image file
-      const formData = new FormData()
-      formData.append("image", selectedFile)
-      formData.append("action", "entry")
+      // Run client-side OCR on the image
+      const ocrData = await runOCR(uploadedImage)
+      setOcrResult(ocrData)
 
+      // Determine the vehicle number to send to API
+      let vehicleNoToSend = ocrData.detectedPlate
+
+      // If OCR didn't detect a valid plate, we'll let the API generate a fake one
+      if (!vehicleNoToSend) {
+        setOcrStatus("No plate detected - using fallback...")
+      }
+
+      // Send to API for vehicle validation and slot assignment
       const response = await fetch("/api/detect-vehicle", {
         method: "POST",
-        body: formData,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          vehicleNo: vehicleNoToSend,
+          action: "entry",
+          ocrConfidence: ocrData.confidence,
+          rawOcrText: ocrData.rawText,
+          usedFallback: ocrData.usedFallback,
+        }),
       })
       
       const result = await response.json()
       
       if (result.success) {
+        // Update OCR result with the final vehicle number if fallback was used
+        if (ocrData.usedFallback) {
+          setOcrResult({
+            ...ocrData,
+            detectedPlate: result.data.vehicleNo,
+          })
+        }
+
         setVehicleDetails({
           vehicleNo: result.data.vehicleNo,
           owner: result.data.owner,
@@ -190,6 +348,7 @@ export default function VehicleUploadPage() {
           message: result.data.message,
         })
         setProcessingState("complete")
+        setOcrStatus("Complete")
       } else {
         setFileError({
           message: result.error || "Failed to process image",
@@ -200,12 +359,12 @@ export default function VehicleUploadPage() {
     } catch (error) {
       console.error("Error detecting vehicle:", error)
       setFileError({
-        message: "Failed to connect to detection service",
-        type: "upload_failed"
+        message: "OCR processing failed. Please try again.",
+        type: "ocr_failed"
       })
       setProcessingState("idle")
     }
-  }, [selectedFile])
+  }, [selectedFile, uploadedImage])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -237,6 +396,9 @@ export default function VehicleUploadPage() {
     setVehicleDetails(null)
     setFileError(null)
     setUploadSuccess(false)
+    setOcrResult(null)
+    setOcrProgress(0)
+    setOcrStatus("")
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -421,20 +583,34 @@ export default function VehicleUploadPage() {
                         {processingState === "uploading" && (
                           <>
                             <Loader2 className="h-12 w-12 animate-spin text-lime-400" />
-                            <span className="mt-4 text-lg font-medium text-white">Uploading...</span>
+                            <span className="mt-4 text-lg font-medium text-white">Preparing image...</span>
                           </>
                         )}
                         {processingState === "processing" && (
-                          <>
+                          <div className="flex flex-col items-center gap-4 px-8">
                             <div className="relative">
                               <ScanLine className="h-16 w-16 animate-pulse text-lime-400" />
                               <div className="absolute inset-0 animate-ping">
                                 <ScanLine className="h-16 w-16 text-lime-400/30" />
                               </div>
                             </div>
-                            <span className="mt-4 text-lg font-medium text-white">Processing with AI...</span>
-                            <span className="mt-2 text-sm text-zinc-400">Detecting license plate</span>
-                          </>
+                            <span className="text-lg font-medium text-white">Running OCR...</span>
+                            <span className="text-sm text-zinc-400">{ocrStatus || "Processing image..."}</span>
+                            
+                            {/* Progress bar */}
+                            <div className="w-full max-w-xs">
+                              <div className="mb-2 flex items-center justify-between text-xs">
+                                <span className="text-zinc-500">Progress</span>
+                                <span className="font-mono text-lime-400">{ocrProgress}%</span>
+                              </div>
+                              <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-700">
+                                <div 
+                                  className="h-full bg-gradient-to-r from-lime-500 to-lime-400 transition-all duration-300"
+                                  style={{ width: `${ocrProgress}%` }}
+                                />
+                              </div>
+                            </div>
+                          </div>
                         )}
                       </div>
                     )}
@@ -553,36 +729,82 @@ export default function VehicleUploadPage() {
                     <ScanLine className="h-5 w-5 text-lime-400" />
                   </div>
                   OCR Detection Result
-                  {vehicleDetails && (
-                    <span className="ml-auto flex items-center gap-1.5 rounded-full border border-lime-500/30 bg-lime-500/10 px-3 py-1 text-xs font-medium text-lime-400">
+                  {ocrResult && (
+                    <span className={`ml-auto flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-medium ${
+                      ocrResult.usedFallback 
+                        ? "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                        : "border-lime-500/30 bg-lime-500/10 text-lime-400"
+                    }`}>
                       <Zap className="h-3.5 w-3.5" />
-                      {vehicleDetails.confidence}% Match
+                      {ocrResult.usedFallback ? "Fallback Used" : `${Math.round(ocrResult.confidence)}% Confidence`}
                     </span>
                   )}
                 </h3>
 
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-700/50 bg-zinc-800/50 p-8">
-                  {processingState === "complete" && vehicleDetails ? (
-                    <div className="text-center">
-                      <div className="mb-4 inline-flex items-center gap-2 rounded-xl bg-lime-500/10 px-6 py-4">
-                        <Car className="h-8 w-8 text-lime-400" />
-                        <span className="text-3xl font-bold tracking-widest text-white">
-                          {vehicleDetails.vehicleNo}
+                <div className="space-y-4">
+                  {/* Detected Plate Number */}
+                  <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-700/50 bg-zinc-800/50 p-6">
+                    {processingState === "complete" && vehicleDetails ? (
+                      <div className="w-full text-center">
+                        <div className="mb-4 inline-flex items-center gap-2 rounded-xl bg-lime-500/10 px-6 py-4">
+                          <Car className="h-8 w-8 text-lime-400" />
+                          <span className="text-3xl font-bold tracking-widest text-white">
+                            {vehicleDetails.vehicleNo}
+                          </span>
+                        </div>
+                        <p className="text-sm text-zinc-400">
+                          {ocrResult?.usedFallback 
+                            ? "Generated plate (OCR did not detect a valid pattern)"
+                            : "License Plate Detected Successfully"}
+                        </p>
+                      </div>
+                    ) : processingState === "processing" ? (
+                      <div className="flex flex-col items-center gap-4 py-4">
+                        <div className="relative h-16 w-32 overflow-hidden rounded-lg border border-lime-500/30 bg-zinc-900">
+                          <div className="animate-scan absolute inset-0 bg-gradient-to-b from-lime-500/30 via-lime-500/50 to-lime-500/30" />
+                        </div>
+                        <span className="text-zinc-400">{ocrStatus || "Scanning license plate..."}</span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-3 py-4 text-zinc-500">
+                        <Eye className="h-12 w-12 opacity-50" />
+                        <span>Awaiting vehicle image</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Raw OCR Text (shown after processing) */}
+                  {ocrResult && processingState === "complete" && (
+                    <div className="rounded-xl border border-zinc-700/50 bg-zinc-800/30 p-4">
+                      <div className="mb-3 flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-zinc-400" />
+                        <span className="text-sm font-medium text-zinc-400">Raw OCR Output</span>
+                        <span className="ml-auto rounded bg-zinc-700 px-2 py-0.5 text-xs text-zinc-400">
+                          Tesseract.js
                         </span>
                       </div>
-                      <p className="text-sm text-zinc-400">License Plate Detected Successfully</p>
-                    </div>
-                  ) : processingState === "processing" ? (
-                    <div className="flex flex-col items-center gap-4 py-4">
-                      <div className="relative h-16 w-32 overflow-hidden rounded-lg border border-lime-500/30 bg-zinc-900">
-                        <div className="animate-scan absolute inset-0 bg-gradient-to-b from-lime-500/30 via-lime-500/50 to-lime-500/30" />
+                      <div className="max-h-24 overflow-y-auto rounded-lg bg-zinc-900/50 p-3">
+                        <pre className="whitespace-pre-wrap break-all font-mono text-xs text-zinc-300">
+                          {ocrResult.rawText.trim() || "(No text detected)"}
+                        </pre>
                       </div>
-                      <span className="text-zinc-400">Scanning license plate...</span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col items-center gap-3 py-4 text-zinc-500">
-                      <Eye className="h-12 w-12 opacity-50" />
-                      <span>Awaiting vehicle image</span>
+                      
+                      {/* Pattern Match Status */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <Search className="h-4 w-4 text-zinc-500" />
+                        <span className="text-xs text-zinc-500">Pattern Match:</span>
+                        {ocrResult.usedFallback ? (
+                          <span className="flex items-center gap-1 text-xs text-amber-400">
+                            <AlertTriangle className="h-3 w-3" />
+                            No valid plate pattern found - using fallback data
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-xs text-lime-400">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Valid Indian plate pattern detected
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
