@@ -10,22 +10,223 @@ import {
   addExitLog,
   getEntryLogByVehicle,
   calculateDuration,
+  fakeOCRResults,
+  generateVehicleNo,
   type EntryLog,
   type ExitLog,
 } from "@/lib/fake-data"
 
-// POST: Vehicle entry detection
-export async function POST(request: Request) {
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+// Allowed image MIME types
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/jpg", "image/png"]
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+
+// ============================================================================
+// IMAGE PROCESSING PLACEHOLDER
+// ============================================================================
+
+/**
+ * Process the uploaded image and extract license plate text.
+ * 
+ * Currently returns fake OCR results for demonstration.
+ * Replace this function with actual OCR implementation.
+ * 
+ * @param imageBuffer - The image file buffer
+ * @param mimeType - The MIME type of the image
+ * @returns Detected vehicle number and confidence score
+ * 
+ * INTEGRATION POINTS FOR REAL OCR:
+ * 
+ * Option 1: EasyOCR (Python)
+ * --------------------------
+ * - Set up a Python microservice with FastAPI/Flask
+ * - Use easyocr library: reader.readtext(image_path)
+ * - Call via HTTP from this route
+ * 
+ * Option 2: Tesseract.js (JavaScript)
+ * ------------------------------------
+ * import Tesseract from 'tesseract.js';
+ * const result = await Tesseract.recognize(imageBuffer, 'eng');
+ * const vehicleNo = result.data.text.trim();
+ * 
+ * Option 3: OpenCV + Custom Model
+ * --------------------------------
+ * - Use OpenCV for image preprocessing (grayscale, threshold, contour detection)
+ * - Apply trained YOLO/SSD model for license plate detection
+ * - Extract ROI and run OCR on the cropped region
+ * 
+ * Option 4: Cloud OCR Services
+ * ----------------------------
+ * - Google Cloud Vision API
+ * - AWS Textract
+ * - Azure Computer Vision
+ */
+async function processImageOCR(
+  imageBuffer: Buffer,
+  mimeType: string
+): Promise<{ vehicleNo: string; confidence: number }> {
+  // Log image details for debugging (remove in production)
+  console.log(`[OCR] Processing image: ${mimeType}, size: ${imageBuffer.length} bytes`)
+
+  // ============================================================================
+  // TODO: IMPLEMENT REAL OCR HERE
+  // ============================================================================
+  // 
+  // Example with Tesseract.js:
+  // --------------------------
+  // import Tesseract from 'tesseract.js';
+  // 
+  // // Preprocess image if needed (convert to grayscale, enhance contrast)
+  // const preprocessedImage = await preprocessImage(imageBuffer);
+  // 
+  // // Run OCR
+  // const result = await Tesseract.recognize(preprocessedImage, 'eng', {
+  //   tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ',
+  // });
+  // 
+  // // Extract and clean license plate text
+  // const rawText = result.data.text;
+  // const vehicleNo = extractLicensePlate(rawText);
+  // const confidence = result.data.confidence;
+  // 
+  // return { vehicleNo, confidence };
+  // 
+  // ============================================================================
+  // Example with external Python EasyOCR service:
+  // ============================================================================
+  // 
+  // const formData = new FormData();
+  // formData.append('image', new Blob([imageBuffer], { type: mimeType }));
+  // 
+  // const response = await fetch('http://localhost:8000/api/ocr', {
+  //   method: 'POST',
+  //   body: formData,
+  // });
+  // 
+  // const result = await response.json();
+  // return { vehicleNo: result.plate_number, confidence: result.confidence };
+  // 
+  // ============================================================================
+
+  // FAKE OCR RESULT FOR DEMONSTRATION
+  // Randomly select from known vehicles or generate a random plate
+  const useKnownVehicle = Math.random() > 0.3 // 70% chance of known vehicle
+  
+  let vehicleNo: string
+  if (useKnownVehicle) {
+    const randomIndex = Math.floor(Math.random() * fakeOCRResults.length)
+    vehicleNo = fakeOCRResults[randomIndex].vehicleNo
+  } else {
+    vehicleNo = generateVehicleNo()
+  }
+
+  // Simulate confidence based on "image quality"
+  const confidence = 92 + Math.random() * 7 // 92-99%
+
   // Simulate processing delay
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  await new Promise((resolve) => setTimeout(resolve, 500))
 
+  return { vehicleNo, confidence }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+function validateImageFile(
+  file: File
+): { valid: true } | { valid: false; error: string } {
+  // Check MIME type
+  if (!ALLOWED_MIME_TYPES.includes(file.type.toLowerCase())) {
+    return {
+      valid: false,
+      error: `Invalid file type: ${file.type}. Allowed types: JPG, JPEG, PNG`,
+    }
+  }
+
+  // Check file size
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: `File too large: ${(file.size / 1024 / 1024).toFixed(2)}MB. Maximum: 10MB`,
+    }
+  }
+
+  return { valid: true }
+}
+
+// ============================================================================
+// API ROUTE HANDLER
+// ============================================================================
+
+export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const { vehicleNo, action = "entry" } = body
+    const contentType = request.headers.get("content-type") || ""
 
-    if (!vehicleNo) {
+    let vehicleNo: string
+    let confidence: number
+    let action = "entry"
+
+    // ========================================================================
+    // HANDLE FORMDATA (Image Upload)
+    // ========================================================================
+    if (contentType.includes("multipart/form-data")) {
+      const formData = await request.formData()
+      const imageFile = formData.get("image") as File | null
+      action = (formData.get("action") as string) || "entry"
+
+      if (!imageFile) {
+        return NextResponse.json(
+          { success: false, error: "No image file provided" },
+          { status: 400 }
+        )
+      }
+
+      // Validate the image file
+      const validation = validateImageFile(imageFile)
+      if (!validation.valid) {
+        return NextResponse.json(
+          { success: false, error: validation.error },
+          { status: 400 }
+        )
+      }
+
+      // Convert file to buffer for processing
+      const arrayBuffer = await imageFile.arrayBuffer()
+      const imageBuffer = Buffer.from(arrayBuffer)
+
+      // Process image with OCR
+      const ocrResult = await processImageOCR(imageBuffer, imageFile.type)
+      vehicleNo = ocrResult.vehicleNo
+      confidence = ocrResult.confidence
+
+      console.log(`[OCR] Detected plate: ${vehicleNo} (${confidence.toFixed(1)}% confidence)`)
+    }
+    // ========================================================================
+    // HANDLE JSON (Legacy/Testing)
+    // ========================================================================
+    else if (contentType.includes("application/json")) {
+      const body = await request.json()
+      vehicleNo = body.vehicleNo
+      action = body.action || "entry"
+      confidence = 95 + Math.random() * 5
+
+      if (!vehicleNo) {
+        return NextResponse.json(
+          { success: false, error: "Vehicle number is required" },
+          { status: 400 }
+        )
+      }
+    }
+    // ========================================================================
+    // UNSUPPORTED CONTENT TYPE
+    // ========================================================================
+    else {
       return NextResponse.json(
-        { success: false, error: "Vehicle number is required" },
+        { success: false, error: "Unsupported content type. Use multipart/form-data or application/json" },
         { status: 400 }
       )
     }
@@ -35,10 +236,12 @@ export async function POST(request: Request) {
       minute: "2-digit",
     })
 
-    // Handle EXIT action
+    // ========================================================================
+    // HANDLE EXIT ACTION
+    // ========================================================================
     if (action === "exit") {
       const entryLog = getEntryLogByVehicle(vehicleNo)
-      
+
       if (!entryLog) {
         return NextResponse.json({
           success: false,
@@ -56,7 +259,7 @@ export async function POST(request: Request) {
 
       // Remove from entry logs and add to exit logs
       const removedEntry = removeEntryLog(vehicleNo)
-      
+
       if (removedEntry && releaseResult.success) {
         const exitLog: ExitLog = {
           id: `exit-${Date.now()}`,
@@ -84,24 +287,26 @@ export async function POST(request: Request) {
             duration: exitLog.duration,
             releasedSlot: releaseResult.slotId,
             gate: exitLog.gate,
+            confidence: Math.round(confidence * 10) / 10,
           },
         })
       }
 
-      return NextResponse.json({
-        success: false,
-        error: "Failed to process vehicle exit",
-      })
+      return NextResponse.json(
+        { success: false, error: "Failed to process vehicle exit" },
+        { status: 500 }
+      )
     }
 
-    // Handle ENTRY action
+    // ========================================================================
+    // HANDLE ENTRY ACTION
+    // ========================================================================
+    
     // Check vehicle status in the system
     const vehicleCheck = checkVehicleStatus(vehicleNo)
-    const confidence = 95 + Math.random() * 5
 
     // Handle BLACKLISTED vehicle
     if (vehicleCheck.status === "blacklisted") {
-      // Create critical alert for blacklisted vehicle
       addAlert({
         title: "Blacklisted Vehicle Entry Attempt",
         description: `Vehicle ${vehicleNo} attempted entry - access denied. This vehicle is on the blacklist.`,
@@ -113,7 +318,6 @@ export async function POST(request: Request) {
         status: "active",
       })
 
-      // Add entry log with denied status
       const entryLog: EntryLog = {
         id: `entry-${Date.now()}`,
         vehicleNo,
@@ -149,7 +353,6 @@ export async function POST(request: Request) {
 
     // Handle UNAUTHORIZED vehicle
     if (vehicleCheck.status === "unauthorized") {
-      // Create critical alert for unauthorized vehicle
       addAlert({
         title: "Unauthorized Vehicle Detected",
         description: `Unregistered vehicle ${vehicleNo} detected at entry gate. No valid parking permit found in database.`,
@@ -161,7 +364,6 @@ export async function POST(request: Request) {
         status: "active",
       })
 
-      // Add entry log with unauthorized status (no slot assigned)
       const entryLog: EntryLog = {
         id: `entry-${Date.now()}`,
         vehicleNo,
@@ -196,11 +398,9 @@ export async function POST(request: Request) {
     }
 
     // Handle AUTHORIZED vehicle
-    // Find first available parking slot
     const availableSlot = getFirstAvailableSlot()
 
     if (!availableSlot) {
-      // No slots available
       addAlert({
         title: "Parking Full - Vehicle Waiting",
         description: `Authorized vehicle ${vehicleNo} arrived but no parking slots available.`,
@@ -240,7 +440,6 @@ export async function POST(request: Request) {
     })
 
     if (assigned) {
-      // Create entry log
       const entryLog: EntryLog = {
         id: `entry-${Date.now()}`,
         vehicleNo,
@@ -279,9 +478,10 @@ export async function POST(request: Request) {
       { success: false, error: "Failed to assign parking slot" },
       { status: 500 }
     )
-  } catch {
+  } catch (error) {
+    console.error("[detect-vehicle] Error:", error)
     return NextResponse.json(
-      { success: false, error: "Invalid request body" },
+      { success: false, error: "Failed to process request" },
       { status: 400 }
     )
   }

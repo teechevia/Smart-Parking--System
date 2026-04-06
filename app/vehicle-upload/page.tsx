@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
 import { ParkingSidebar } from "@/components/parking-sidebar"
 import {
   Upload,
@@ -23,11 +23,16 @@ import {
   Zap,
   Activity,
   AlertTriangle,
+  FileWarning,
 } from "lucide-react"
 import Image from "next/image"
-import { vehicleScanHistory, fakeOCRResults, generateVehicleNo, type AuthStatus } from "@/lib/fake-data"
+import { vehicleScanHistory, type AuthStatus } from "@/lib/fake-data"
 
 type ProcessingState = "idle" | "uploading" | "processing" | "complete"
+
+// Allowed file types
+const ALLOWED_FILE_TYPES = ["image/jpeg", "image/jpg", "image/png"]
+const ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png"]
 
 interface VehicleDetails {
   vehicleNo: string
@@ -39,6 +44,11 @@ interface VehicleDetails {
   confidence: number
   message?: string
   zone?: string
+}
+
+interface FileError {
+  message: string
+  type: "invalid_type" | "too_large" | "upload_failed"
 }
 
 // Transform vehicle scan history for recent scans table
@@ -84,41 +94,83 @@ const statusConfig = {
 export default function VehicleUploadPage() {
   const [processingState, setProcessingState] = useState<ProcessingState>("idle")
   const [uploadedImage, setUploadedImage] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragOver, setIsDragOver] = useState(false)
   const [vehicleDetails, setVehicleDetails] = useState<VehicleDetails | null>(null)
+  const [fileError, setFileError] = useState<FileError | null>(null)
+  const [uploadSuccess, setUploadSuccess] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Validate file type
+  const validateFile = (file: File): boolean => {
+    setFileError(null)
+    
+    // Check file type
+    if (!ALLOWED_FILE_TYPES.includes(file.type.toLowerCase())) {
+      const extension = file.name.split('.').pop()?.toLowerCase() || ''
+      if (!ALLOWED_EXTENSIONS.includes(extension)) {
+        setFileError({
+          message: `Invalid file type. Please upload JPG, JPEG, or PNG files only.`,
+          type: "invalid_type"
+        })
+        return false
+      }
+    }
+
+    // Check file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError({
+        message: "File is too large. Maximum size is 10MB.",
+        type: "too_large"
+      })
+      return false
+    }
+
+    return true
+  }
+
+  // Handle file selection and preview
+  const handleFileSelection = (file: File) => {
+    if (!validateFile(file)) {
+      return
+    }
+
+    setSelectedFile(file)
+    setUploadSuccess(false)
+    
+    // Create preview
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      setUploadedImage(event.target?.result as string)
+      // Show upload success animation
+      setUploadSuccess(true)
+      setTimeout(() => setUploadSuccess(false), 2000)
+    }
+    reader.readAsDataURL(file)
+  }
+
+  // Detect vehicle using FormData with the uploaded image
   const handleDetectVehicle = useCallback(async () => {
+    if (!selectedFile) return
+
     setProcessingState("uploading")
+    setFileError(null)
 
     setTimeout(() => {
       setProcessingState("processing")
     }, 1000)
 
-    // Simulate OCR: randomly pick from known vehicles or generate a random one
-    const useKnownVehicle = Math.random() > 0.3 // 70% chance of known vehicle
-    let simulatedVehicleNo: string
-    
-    if (useKnownVehicle) {
-      // Pick from fakeOCRResults to test various statuses
-      const randomIndex = Math.floor(Math.random() * fakeOCRResults.length)
-      simulatedVehicleNo = fakeOCRResults[randomIndex].vehicleNo
-    } else {
-      // Generate a random (likely unauthorized) vehicle
-      simulatedVehicleNo = generateVehicleNo()
-    }
-
-    // Call the detect-vehicle API with the simulated vehicle number
     try {
+      // Create FormData with the image file
+      const formData = new FormData()
+      formData.append("image", selectedFile)
+      formData.append("action", "entry")
+
       const response = await fetch("/api/detect-vehicle", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          vehicleNo: simulatedVehicleNo,
-          action: "entry",
-        }),
+        body: formData,
       })
+      
       const result = await response.json()
       
       if (result.success) {
@@ -138,12 +190,22 @@ export default function VehicleUploadPage() {
           message: result.data.message,
         })
         setProcessingState("complete")
+      } else {
+        setFileError({
+          message: result.error || "Failed to process image",
+          type: "upload_failed"
+        })
+        setProcessingState("idle")
       }
     } catch (error) {
       console.error("Error detecting vehicle:", error)
+      setFileError({
+        message: "Failed to connect to detection service",
+        type: "upload_failed"
+      })
       setProcessingState("idle")
     }
-  }, [])
+  }, [selectedFile])
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -151,37 +213,33 @@ export default function VehicleUploadPage() {
       setIsDragOver(false)
 
       const file = e.dataTransfer.files[0]
-      if (file && file.type.startsWith("image/")) {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          setUploadedImage(event.target?.result as string)
-          handleDetectVehicle()
-        }
-        reader.readAsDataURL(file)
+      if (file) {
+        handleFileSelection(file)
       }
     },
-    [handleDetectVehicle]
+    []
   )
 
   const handleFileSelect = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0]
       if (file) {
-        const reader = new FileReader()
-        reader.onload = (event) => {
-          setUploadedImage(event.target?.result as string)
-          handleDetectVehicle()
-        }
-        reader.readAsDataURL(file)
+        handleFileSelection(file)
       }
     },
-    [handleDetectVehicle]
+    []
   )
 
   const resetUpload = () => {
     setUploadedImage(null)
+    setSelectedFile(null)
     setProcessingState("idle")
     setVehicleDetails(null)
+    setFileError(null)
+    setUploadSuccess(false)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
   }
 
   const StatusBadge = ({ status }: { status: AuthStatus }) => {
@@ -304,6 +362,20 @@ export default function VehicleUploadPage() {
                 )}
               </div>
 
+              {/* Error Message */}
+              {fileError && (
+                <div className="mb-4 flex items-center gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3">
+                  <FileWarning className="h-5 w-5 text-red-400" />
+                  <span className="text-sm font-medium text-red-400">{fileError.message}</span>
+                  <button
+                    onClick={() => setFileError(null)}
+                    className="ml-auto text-red-400 hover:text-red-300"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+
               {/* Drop Zone */}
               <div
                 onDragOver={(e) => {
@@ -313,7 +385,9 @@ export default function VehicleUploadPage() {
                 onDragLeave={() => setIsDragOver(false)}
                 onDrop={handleDrop}
                 className={`relative flex min-h-[280px] cursor-pointer flex-col items-center justify-center rounded-[1.5rem] border-2 border-dashed transition-all duration-300 ${
-                  isDragOver
+                  fileError
+                    ? "border-red-500/50 bg-red-500/5"
+                    : isDragOver
                     ? "border-lime-500 bg-lime-500/10"
                     : uploadedImage
                       ? "border-lime-500/30 bg-zinc-800/50"
@@ -328,6 +402,19 @@ export default function VehicleUploadPage() {
                       fill
                       className="rounded-xl object-contain"
                     />
+                    {/* Upload success animation */}
+                    {uploadSuccess && processingState === "idle" && (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-zinc-900/80 backdrop-blur-sm">
+                        <div className="relative">
+                          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-lime-500/20">
+                            <CheckCircle2 className="h-12 w-12 text-lime-400 animate-bounce" />
+                          </div>
+                          <div className="absolute inset-0 animate-ping rounded-full bg-lime-500/20" />
+                        </div>
+                        <span className="mt-4 text-lg font-medium text-white">Image Uploaded!</span>
+                        <span className="mt-2 text-sm text-zinc-400">Ready for detection</span>
+                      </div>
+                    )}
                     {/* Processing overlay */}
                     {processingState !== "complete" && processingState !== "idle" && (
                       <div className="absolute inset-0 flex flex-col items-center justify-center rounded-xl bg-zinc-900/80 backdrop-blur-sm">
@@ -364,23 +451,34 @@ export default function VehicleUploadPage() {
                 ) : (
                   <label className="flex cursor-pointer flex-col items-center gap-4 p-8">
                     <div className="relative">
-                      <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-zinc-700/50 transition-all duration-300 group-hover:bg-lime-500/20">
-                        <ImageIcon className="h-10 w-10 text-zinc-400 transition-colors group-hover:text-lime-400" />
+                      <div className={`flex h-20 w-20 items-center justify-center rounded-2xl transition-all duration-300 ${
+                        fileError ? "bg-red-500/20" : "bg-zinc-700/50 group-hover:bg-lime-500/20"
+                      }`}>
+                        {fileError ? (
+                          <FileWarning className="h-10 w-10 text-red-400" />
+                        ) : (
+                          <ImageIcon className="h-10 w-10 text-zinc-400 transition-colors group-hover:text-lime-400" />
+                        )}
                       </div>
-                      <div className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-lg bg-lime-500 shadow-lg shadow-lime-500/30">
+                      <div className={`absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-lg shadow-lg ${
+                        fileError ? "bg-red-500 shadow-red-500/30" : "bg-lime-500 shadow-lime-500/30"
+                      }`}>
                         <Upload className="h-4 w-4 text-zinc-900" />
                       </div>
                     </div>
                     <div className="text-center">
-                      <p className="text-lg font-medium text-zinc-300">Drop vehicle image here</p>
+                      <p className={`text-lg font-medium ${fileError ? "text-red-300" : "text-zinc-300"}`}>
+                        {isDragOver ? "Drop your image here" : "Drop vehicle image here"}
+                      </p>
                       <p className="mt-1 text-sm text-zinc-500">or click to browse files</p>
                     </div>
                     <span className="mt-2 rounded-full border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-400">
-                      Supports JPG, PNG, WEBP
+                      Supports JPG, JPEG, PNG only
                     </span>
                     <input
+                      ref={fileInputRef}
                       type="file"
-                      accept="image/*"
+                      accept=".jpg,.jpeg,.png"
                       onChange={handleFileSelect}
                       className="hidden"
                     />
@@ -388,18 +486,57 @@ export default function VehicleUploadPage() {
                 )}
               </div>
 
-              {/* Upload Button */}
-              {!uploadedImage && (
-                <label className="group/btn mt-6 flex cursor-pointer items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-lime-500 to-lime-400 px-8 py-4 text-lg font-semibold text-zinc-900 shadow-xl shadow-lime-500/25 transition-all duration-300 hover:shadow-lime-500/40 hover:brightness-110">
-                  <Upload className="h-5 w-5" />
-                  Select Image to Upload
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
-                </label>
+              {/* Action Buttons */}
+              <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                {!uploadedImage ? (
+                  <label className="group/btn flex flex-1 cursor-pointer items-center justify-center gap-3 rounded-2xl bg-gradient-to-r from-lime-500 to-lime-400 px-8 py-4 text-lg font-semibold text-zinc-900 shadow-xl shadow-lime-500/25 transition-all duration-300 hover:shadow-lime-500/40 hover:brightness-110">
+                    <Upload className="h-5 w-5" />
+                    Select Image to Upload
+                    <input
+                      type="file"
+                      accept=".jpg,.jpeg,.png"
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+                  </label>
+                ) : processingState === "idle" && !uploadSuccess ? (
+                  <button
+                    onClick={handleDetectVehicle}
+                    disabled={!selectedFile}
+                    className={`group/btn flex flex-1 items-center justify-center gap-3 rounded-2xl px-8 py-4 text-lg font-semibold transition-all duration-300 ${
+                      selectedFile
+                        ? "bg-gradient-to-r from-lime-500 to-lime-400 text-zinc-900 shadow-xl shadow-lime-500/25 hover:shadow-lime-500/40 hover:brightness-110"
+                        : "cursor-not-allowed bg-zinc-700 text-zinc-400"
+                    }`}
+                  >
+                    <ScanLine className="h-5 w-5" />
+                    Detect Vehicle
+                  </button>
+                ) : processingState === "complete" ? (
+                  <button
+                    onClick={resetUpload}
+                    className="group/btn flex flex-1 items-center justify-center gap-3 rounded-2xl border border-lime-500/30 bg-lime-500/10 px-8 py-4 text-lg font-semibold text-lime-400 transition-all duration-300 hover:bg-lime-500/20"
+                  >
+                    <Upload className="h-5 w-5" />
+                    Upload Another Image
+                  </button>
+                ) : null}
+              </div>
+
+              {/* File info */}
+              {selectedFile && processingState === "idle" && (
+                <div className="mt-4 flex items-center justify-between rounded-xl border border-zinc-700/50 bg-zinc-800/30 px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <ImageIcon className="h-5 w-5 text-zinc-400" />
+                    <div>
+                      <p className="text-sm font-medium text-zinc-300">{selectedFile.name}</p>
+                      <p className="text-xs text-zinc-500">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                    </div>
+                  </div>
+                  <span className="rounded-full bg-lime-500/10 px-3 py-1 text-xs font-medium text-lime-400">
+                    Ready
+                  </span>
+                </div>
               )}
             </div>
           </div>
