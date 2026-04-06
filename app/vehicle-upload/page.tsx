@@ -483,68 +483,69 @@ export default function VehicleUploadPage() {
                 </div>
 
                 {processingState === "complete" && vehicleDetails ? (
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
-                        <User className="h-6 w-6 text-zinc-400" />
+                  <>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
+                          <User className="h-6 w-6 text-zinc-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-500">Owner Name</p>
+                          <p className="font-semibold text-white">{vehicleDetails.owner}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-sm text-zinc-500">Owner Name</p>
-                        <p className="font-semibold text-white">{vehicleDetails.owner}</p>
+                      <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
+                          <Car className="h-6 w-6 text-zinc-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-500">Vehicle Type</p>
+                          <p className="font-semibold text-white">{vehicleDetails.type}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
+                          <ParkingCircle className="h-6 w-6 text-zinc-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-500">Assigned Slot</p>
+                          <p className={`font-semibold ${vehicleDetails.slot ? "text-lime-400" : "text-red-400"}`}>
+                            {vehicleDetails.slot ? `${vehicleDetails.slot}${vehicleDetails.zone ? ` (Zone ${vehicleDetails.zone})` : ""}` : "No Slot Assigned"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
+                          <Clock className="h-6 w-6 text-zinc-400" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-zinc-500">Entry Time</p>
+                          <p className="font-semibold text-white">{vehicleDetails.entryTime}</p>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
-                        <Car className="h-6 w-6 text-zinc-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-zinc-500">Vehicle Type</p>
-                        <p className="font-semibold text-white">{vehicleDetails.type}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
-                        <ParkingCircle className="h-6 w-6 text-zinc-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-zinc-500">Assigned Slot</p>
-                        <p className={`font-semibold ${vehicleDetails.slot ? "text-lime-400" : "text-red-400"}`}>
-                          {vehicleDetails.slot ? `${vehicleDetails.slot}${vehicleDetails.zone ? ` (Zone ${vehicleDetails.zone})` : ""}` : "No Slot Assigned"}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4 rounded-xl border border-zinc-700/50 bg-zinc-800/50 p-4">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-zinc-700/50">
-                        <Clock className="h-6 w-6 text-zinc-400" />
-                      </div>
-                      <div>
-                        <p className="text-sm text-zinc-500">Entry Time</p>
-                        <p className="font-semibold text-white">{vehicleDetails.entryTime}</p>
-                      </div>
-                    </div>
-                  </div>
 
-                  {/* Status Message */}
-                  {vehicleDetails.message && (
-                    <div className={`mt-4 rounded-xl border p-4 ${
-                      vehicleDetails.status === "authorized" 
-                        ? "border-lime-500/30 bg-lime-500/10 text-lime-400" 
-                        : vehicleDetails.status === "blacklisted"
-                        ? "border-red-500/30 bg-red-500/10 text-red-400"
-                        : "border-amber-500/30 bg-amber-500/10 text-amber-400"
-                    }`}>
-                      <div className="flex items-center gap-2">
-                        {vehicleDetails.status === "authorized" ? (
-                          <CheckCircle2 className="h-5 w-5" />
-                        ) : (
-                          <AlertTriangle className="h-5 w-5" />
-                        )}
-                        <span className="font-medium">{vehicleDetails.message}</span>
+                    {/* Status Message */}
+                    {vehicleDetails.message && (
+                      <div className={`mt-4 rounded-xl border p-4 ${
+                        vehicleDetails.status === "authorized" 
+                          ? "border-lime-500/30 bg-lime-500/10 text-lime-400" 
+                          : vehicleDetails.status === "blacklisted"
+                          ? "border-red-500/30 bg-red-500/10 text-red-400"
+                          : "border-amber-500/30 bg-amber-500/10 text-amber-400"
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          {vehicleDetails.status === "authorized" ? (
+                            <CheckCircle2 className="h-5 w-5" />
+                          ) : (
+                            <AlertTriangle className="h-5 w-5" />
+                          )}
+                          <span className="font-medium">{vehicleDetails.message}</span>
+                        </div>
                       </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
+                    )}
+                  </>
+                ) : (
                   <div className="flex flex-col items-center justify-center rounded-2xl border border-zinc-700/50 bg-zinc-800/30 py-12 text-zinc-500">
                     <Shield className="mb-3 h-12 w-12 opacity-50" />
                     <span>Vehicle details will appear here</span>
